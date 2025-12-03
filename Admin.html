@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Admin Panel</title>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        .loader {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b5563;
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Drag and Drop Styles */
+        .draggable-item {
+            cursor: grab;
+        }
+
+        .draggable-item:active {
+            cursor: grabbing;
+        }
+
+        .dragging {
+            opacity: 0.5;
+            border: 2px dashed #3b82f6;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-950 text-gray-100 font-sans antialiased selection:bg-blue-500 selection:text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+        const { createClient } = window.supabase;
+        const BUCKET_NAME = 'site_assets';
+
+        // --- Safe Icon Component ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const containerRef = useRef(null);
+            useEffect(() => {
+                if (!window.lucide || !containerRef.current) return;
+                const container = containerRef.current;
+                container.innerHTML = '';
+                const i = document.createElement('i');
+                i.setAttribute('data-lucide', name);
+                if (className) i.className = className;
+                container.appendChild(i);
+                window.lucide.createIcons({
+                    root: container,
+                    nameAttr: 'data-lucide',
+                    attrs: { width: size, height: size }
+                });
+            }, [name, size, className]);
+            return <span ref={containerRef} style={{ display: 'inline-flex' }}></span>;
+        };
+
+        // --- Login Component ---
+        const Login = ({ onLogin }) => {
+            const [url, setUrl] = useState('https://qmjwyqbqlttwfchhbcjd.supabase.co');
+            const [key, setKey] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                await onLogin(url, key);
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-950 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-gray-950 to-gray-950"></div>
+                    <div className="bg-gray-900/80 p-8 rounded-xl shadow-2xl w-full max-w-md border border-gray-800 backdrop-blur-sm z-10">
+                        <div className="text-center mb-8">
+                            <h2 className="text-2xl font-bold text-white">Admin Access</h2>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <div>
+                                <label className="text-xs text-gray-500 mb-1 block">Supabase URL</label>
+                                <input type="text" value={url} onChange={e => setUrl(e.target.value)} className="input-field text-gray-400" readOnly />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 mb-1 block">Service Role Key</label>
+                                <input type="password" value={key} onChange={e => setKey(e.target.value)} className="input-field" placeholder="Paste Key Here" required />
+                            </div>
+                            <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg flex justify-center">
+                                {loading ? <div className="loader"></div> : 'Login'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Helper: Generic File Upload ---
+        const uploadFileToSupabase = async (client, file, prefix = 'upload') => {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${prefix}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const { error } = await client.storage.from(BUCKET_NAME).upload(fileName, file);
+            if (error) throw error;
+            const { data } = client.storage.from(BUCKET_NAME).getPublicUrl(fileName);
+            return data.publicUrl;
+        };
+
+        // --- Single File Button ---
+        const FileUploadButton = ({ onFileSelect }) => {
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const previewUrl = URL.createObjectURL(file);
+                onFileSelect(file, previewUrl);
+            };
+            return (
+                <div className="relative group">
+                    <input type="file" onChange={handleFileChange} accept="image/*" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                    <button type="button" className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded border border-gray-700 flex items-center gap-2 transition">
+                        <Icon name="upload" size={16} />
+                        <span className="text-sm font-medium">Select File</span>
+                    </button>
+                </div>
+            );
+        };
+
+        // --- ADVANCED MEDIA MANAGER (With Drag & Drop) ---
+        const MediaManager = ({ entityType, entityId, supabase, items, onItemsChange, onDeletedIdsChange }) => {
+            const [isDraggingFile, setIsDraggingFile] = useState(false);
+            const [loading, setLoading] = useState(false);
+            const [draggedItemIndex, setDraggedItemIndex] = useState(null);
+
+            useEffect(() => {
+                if (!entityId || items.length > 0) return;
+                const fetchImages = async () => {
+                    setLoading(true);
+                    const { data } = await supabase.from('media_gallery')
+                        .select('*')
+                        .eq('entity_type', entityType)
+                        .eq('entity_id', entityId)
+                        .order('is_primary', { ascending: false })
+                        .order('id', { ascending: false });
+                    if (data) onItemsChange(data);
+                    setLoading(false);
+                };
+                fetchImages();
+            }, [entityId, entityType, supabase]);
+
+            const handleFiles = (files) => {
+                const newItems = Array.from(files).map(file => ({
+                    image_url: URL.createObjectURL(file),
+                    file: file,
+                    is_primary: false,
+                    is_new: true
+                }));
+                if (items.length === 0 && newItems.length > 0) newItems[0].is_primary = true;
+                onItemsChange([...items, ...newItems]);
+            };
+
+            const togglePrimary = (indexToSet) => {
+                const updated = items.map((item, idx) => ({ ...item, is_primary: idx === indexToSet }));
+                onItemsChange(updated);
+            };
+
+            const handleDelete = (indexToDelete) => {
+                const item = items[indexToDelete];
+                if (item.id) onDeletedIdsChange(item.id);
+                const updated = items.filter((_, idx) => idx !== indexToDelete);
+                onItemsChange(updated);
+            };
+
+            // --- Drag & Drop Reordering Logic ---
+            const handleDragStart = (e, index) => {
+                setDraggedItemIndex(index);
+                e.dataTransfer.effectAllowed = "move";
+            };
+
+            const handleDragOver = (e, index) => {
+                e.preventDefault(); // Necessary to allow dropping
+                if (draggedItemIndex === null || draggedItemIndex === index) return;
+            };
+
+            const handleDrop = (e, dropIndex) => {
+                e.preventDefault();
+                if (draggedItemIndex === null) return;
+
+                const newItems = [...items];
+                const [movedItem] = newItems.splice(draggedItemIndex, 1);
+                newItems.splice(dropIndex, 0, movedItem);
+
+                onItemsChange(newItems);
+                setDraggedItemIndex(null);
+            };
+
+            return (
+                <div className="mt-8 pt-6 border-t border-gray-800">
+                    <h4 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                        <Icon name="image" className="text-blue-500" /> Media Gallery
+                    </h4>
+                    <p className="text-gray-400 text-sm mb-4">Drag to reorder. Images are uploaded when you click "Save Details".</p>
+
+                    <div
+                        onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                        onDragLeave={() => setIsDraggingFile(false)}
+                        onDrop={(e) => { e.preventDefault(); setIsDraggingFile(false); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); }}
+                        className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all mb-6 flex flex-col items-center justify-center gap-3 ${isDraggingFile ? 'border-blue-500 bg-blue-900/10' : 'border-gray-700 bg-gray-900/50 hover:bg-gray-900'}`}
+                    >
+                        {loading ? <div className="loader"></div> : <>
+                            <Icon name="upload-cloud" size={32} className="text-gray-500" />
+                            <div className="text-sm text-gray-300">Click to upload or drag and drop files here</div>
+                            <input type="file" multiple accept="image/*" onChange={(e) => handleFiles(e.target.files)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                        </>}
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {items.map((img, idx) => (
+                            <div
+                                key={idx}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, idx)}
+                                onDragOver={(e) => handleDragOver(e, idx)}
+                                onDrop={(e) => handleDrop(e, idx)}
+                                className={`group relative aspect-video rounded-lg overflow-hidden border-2 cursor-move transition-transform ${img.is_primary ? 'border-green-500' : 'border-gray-800'} ${draggedItemIndex === idx ? 'opacity-50 scale-95 border-dashed border-blue-500' : ''}`}
+                            >
+                                <img src={img.image_url} className="w-full h-full object-cover pointer-events-none" />
+                                {img.is_new && <div className="absolute top-2 right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">NEW</div>}
+
+                                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                                    <div className="text-white text-xs mb-1 flex items-center gap-1"><Icon name="move" size={12} /> Drag</div>
+                                    {!img.is_primary && <button type="button" onClick={() => togglePrimary(idx)} className="bg-white text-black px-3 py-1 rounded text-xs font-bold w-full hover:bg-gray-200">Set Cover</button>}
+                                    <button type="button" onClick={() => handleDelete(idx)} className="bg-red-600 text-white px-3 py-1 rounded text-xs font-bold w-full hover:bg-red-500">Remove</button>
+                                </div>
+                                {img.is_primary && <div className="absolute top-2 left-2 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">COVER</div>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Data Table (Fixed Delete Button) ---
+        const DataTable = ({ columns, data, onEdit, onDelete }) => (
+            <div className="overflow-x-auto rounded-lg border border-gray-800 shadow-lg">
+                <table className="min-w-full bg-gray-900">
+                    <thead className="bg-gray-950 text-gray-400 uppercase text-xs font-semibold">
+                        <tr>
+                            {columns.map(col => <th key={col.key} className="px-6 py-4 text-left">{col.label}</th>)}
+                            <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                        {data.length === 0 ? (
+                            <tr><td colSpan={columns.length + 1} className="px-6 py-8 text-center text-gray-500">No records found.</td></tr>
+                        ) : (
+                            data.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-800/50 transition-colors group">
+                                    {columns.map(col => (
+                                        <td key={col.key} className="px-6 py-4 text-sm text-gray-300">
+                                            {col.type === 'image' ? (
+                                                item[col.key] ? <img src={item[col.key]} className="h-10 w-10 rounded object-cover border border-gray-700 bg-white" /> : <div className="h-10 w-10 bg-gray-800 rounded flex items-center justify-center"><Icon name="image" size={14} /></div>
+                                            ) : col.type === 'link' ? (
+                                                item[col.key] ? <a href={item[col.key]} target="_blank" className="text-blue-400 hover:underline">Link <Icon name="external-link" size={10} className="inline" /></a> : '-'
+                                            ) : col.type === 'bool' ? (
+                                                item[col.key] ? <span className="text-green-400">Yes</span> : <span className="text-red-400">No</span>
+                                            ) : col.type === 'array' ? (
+                                                <div className="flex gap-1 flex-wrap">{item[col.key]?.map(tag => <span key={tag} className="px-1.5 py-0.5 bg-gray-800 rounded text-[10px] border border-gray-700">{tag}</span>) || '-'}</div>
+                                            ) : (
+                                                <div className="max-w-xs truncate">{item[col.key] || '-'}</div>
+                                            )}
+                                        </td>
+                                    ))}
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                        <div className="flex justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                            {onEdit && <button onClick={() => onEdit(item)} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded"><Icon name="edit-3" size={16} /></button>}
+                                            {onDelete && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+                                                    className="p-1.5 text-red-400 hover:bg-red-900/30 rounded z-10 relative"
+                                                    title="Delete"
+                                                >
+                                                    <Icon name="trash-2" size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        );
+
+        // --- Main App ---
+        const App = () => {
+            const [client, setClient] = useState(null);
+            const [view, setView] = useState('dashboard');
+            const [toast, setToast] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [tableData, setTableData] = useState([]);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingItem, setEditingItem] = useState({});
+
+            const [galleryItems, setGalleryItems] = useState([]);
+            const [galleryDeletedIds, setGalleryDeletedIds] = useState([]);
+            const [saving, setSaving] = useState(false);
+
+            const [enrollmentStatus, setEnrollmentStatus] = useState(false);
+            const [dashboardStats, setDashboardStats] = useState({});
+
+            // Strict mapping for view -> table names
+            const TABLE_MAP = {
+                projects: 'projects',
+                events: 'events',
+                timeline: 'timeline_events',
+                achievements: 'achievements',
+                partners: 'partners',
+                team: 'team_members',
+                alumni: 'alumni', // Assuming alumni uses alumni table, if different update here
+                gallery: 'gallery_albums',
+                applications: 'applications'
+            };
+
+            useEffect(() => {
+                const storedUrl = sessionStorage.getItem('sb_url');
+                const storedKey = sessionStorage.getItem('sb_key');
+                if (storedUrl && storedKey) handleLogin(storedUrl, storedKey);
+            }, []);
+
+            const handleLogin = (url, key) => {
+                const sb = createClient(url, key);
+                setClient(sb);
+                sessionStorage.setItem('sb_url', url);
+                sessionStorage.setItem('sb_key', key);
+            };
+
+            const showToast = (msg, type = 'success') => {
+                setToast({ msg, type });
+                setTimeout(() => setToast(null), 3000);
+            };
+
+            const fetchDashboard = async () => {
+                if (!client) return;
+                try {
+                    const { data: config } = await client.from('site_config').select('*').eq('key_name', 'enrollment_status').single();
+                    if (config) setEnrollmentStatus(config.value_boolean);
+                    else {
+                        // Init if missing
+                        await client.from('site_config').insert([{ key_name: 'enrollment_status', value_boolean: false }]);
+                    }
+
+                    const tables = ['projects', 'events', 'team_members', 'applications'];
+                    const stats = {};
+                    await Promise.all(tables.map(async (t) => {
+                        const { count } = await client.from(t).select('*', { count: 'exact', head: true });
+                        stats[t] = count || 0;
+                    }));
+                    setDashboardStats(stats);
+                } catch (e) { console.error(e); }
+            };
+
+            const toggleEnrollment = async () => {
+                try {
+                    const newValue = !enrollmentStatus;
+                    const { error } = await client.from('site_config').update({ value_boolean: newValue }).eq('key_name', 'enrollment_status');
+                    if (error) throw error;
+                    setEnrollmentStatus(newValue);
+                    showToast(newValue ? "Enrollment Started" : "Enrollment Stopped");
+                } catch (e) { showToast("Error updating status", 'error'); }
+            };
+
+            const fetchData = async () => {
+                if (!client) return;
+                setLoading(true);
+                if (view === 'dashboard') {
+                    await fetchDashboard();
+                    setLoading(false);
+                    return;
+                }
+
+                try {
+                    const table = TABLE_MAP[view];
+                    if (!table) throw new Error("Unknown table for view: " + view);
+
+                    const query = client.from(table).select('*');
+                    if (['alumni', 'team_members', 'gallery_albums'].includes(table)) {
+                        query.order('id', { ascending: false });
+                    } else {
+                        query.order('created_at', { ascending: false });
+                    }
+
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    setTableData(data || []);
+                } catch (e) { showToast(e.message, 'error'); }
+                setLoading(false);
+            };
+
+            useEffect(() => { fetchData(); setSearchTerm(''); }, [client, view]);
+
+            const handleDelete = async (id) => {
+                if (!confirm("Permanently delete this record? This cannot be undone.")) return;
+
+                try {
+                    const table = TABLE_MAP[view];
+                    if (!table) throw new Error("Table mapping failed");
+
+                    const { error } = await client.from(table).delete().eq('id', id);
+                    if (error) throw error;
+
+                    fetchData();
+                    showToast('Deleted Successfully');
+                } catch (err) {
+                    console.error("Delete Error:", err);
+                    showToast("Delete failed: " + err.message, 'error');
+                }
+            };
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                const formData = new FormData(e.target);
+                const payload = Object.fromEntries(formData);
+                const table = TABLE_MAP[view];
+
+                delete payload.id;
+
+                try {
+                    if (editingItem._image_file) {
+                        payload.image_url = await uploadFileToSupabase(client, editingItem._image_file, view);
+                    }
+                    if (editingItem._logo_file) {
+                        payload.logo_url = await uploadFileToSupabase(client, editingItem._logo_file, 'partners');
+                    }
+                } catch (err) {
+                    showToast("Error uploading file: " + err.message, 'error');
+                    setSaving(false);
+                    return;
+                }
+
+                if (view === 'team') payload.is_active = payload.is_active === 'on';
+                if (view === 'projects') {
+                    if (typeof payload.technologies === 'string') payload.technologies = payload.technologies.split(',').map(s => s.trim()).filter(s => s);
+                    if (typeof payload.contributors === 'string') payload.contributors = payload.contributors.split(',').map(s => s.trim()).filter(s => s);
+                }
+
+                let savedEntityId = editingItem.id;
+
+                try {
+                    if (editingItem.id) {
+                        const { data, error } = await client.from(table).update(payload).eq('id', editingItem.id).select();
+                        if (error) throw error;
+                        savedEntityId = data[0].id;
+                    } else {
+                        const { data, error } = await client.from(table).insert([payload]).select();
+                        if (error) throw error;
+                        savedEntityId = data[0].id;
+                    }
+
+                    // --- Gallery Logic ---
+                    const needsGallery = ['projects', 'events', 'gallery'].includes(view);
+                    if (needsGallery) {
+                        const entityType = view === 'gallery' ? 'GALLERY' : view.slice(0, -1).toUpperCase();
+
+                        if (galleryDeletedIds.length > 0) {
+                            await client.from('media_gallery').delete().in('id', galleryDeletedIds);
+                        }
+
+                        // Upload new files
+                        const processedItems = await Promise.all(galleryItems.map(async (item) => {
+                            let finalUrl = item.image_url;
+                            if (item.file) {
+                                finalUrl = await uploadFileToSupabase(client, item.file, entityType.toLowerCase());
+                            }
+                            return { ...item, image_url: finalUrl };
+                        }));
+
+                        // Handle New vs Existing
+                        const newItems = processedItems.filter(i => !i.id).map(i => ({
+                            entity_type: entityType,
+                            entity_id: savedEntityId,
+                            image_url: i.image_url,
+                            is_primary: i.is_primary
+                        }));
+
+                        const existingItems = processedItems.filter(i => i.id).map(i => ({
+                            id: i.id,
+                            entity_type: entityType,
+                            entity_id: savedEntityId,
+                            image_url: i.image_url,
+                            is_primary: i.is_primary
+                        }));
+
+                        if (newItems.length > 0) await client.from('media_gallery').insert(newItems);
+                        if (existingItems.length > 0) await client.from('media_gallery').upsert(existingItems);
+                    }
+
+                    showToast('Saved Successfully');
+                    setIsModalOpen(false);
+                    fetchData();
+                } catch (err) {
+                    console.error(err);
+                    showToast(err.message, 'error');
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            const filteredData = useMemo(() => {
+                if (!searchTerm) return tableData;
+                const lower = searchTerm.toLowerCase();
+                return tableData.filter(item =>
+                    Object.values(item).some(val => val && String(val).toLowerCase().includes(lower))
+                );
+            }, [tableData, searchTerm]);
+
+            const handleFormChange = (key, val) => {
+                setEditingItem(prev => ({ ...prev, [key]: val }));
+            };
+
+            const handleMainFileSelect = (key, file, previewUrl) => {
+                setEditingItem(prev => ({
+                    ...prev,
+                    [key]: previewUrl,
+                    [`_${key.replace('url', 'file')}`]: file
+                }));
+            };
+
+            const openModal = (item = {}) => {
+                setEditingItem(item);
+                setGalleryItems([]);
+                setGalleryDeletedIds([]);
+                setIsModalOpen(true);
+            };
+
+            if (!client) return <Login onLogin={handleLogin} />;
+
+            return (
+                <div className="flex h-screen overflow-hidden bg-gray-950">
+                    <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+                        <div className="p-6 border-b border-gray-800"><h1 className="text-xl font-bold text-white">ADMIN PANEL</h1></div>
+                        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+                            <button onClick={() => setView('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${view === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}><Icon name="layout-dashboard" size={18} /> Dashboard</button>
+                            <div className="pt-4 pb-2 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Content</div>
+                            {['projects', 'events', 'timeline', 'achievements', 'partners'].map(id => (
+                                <button key={id} onClick={() => setView(id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg capitalize ${view === id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>
+                                    <Icon name="folder" size={16} /> <span className="font-medium">{id}</span>
+                                </button>
+                            ))}
+                            <div className="pt-4 pb-2 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">People & Gallery</div>
+                            {['team', 'alumni', 'gallery'].map(id => (
+                                <button key={id} onClick={() => setView(id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg capitalize ${view === id ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>
+                                    <Icon name={id === 'gallery' ? 'image' : 'users'} size={16} /> <span className="font-medium">{id}</span>
+                                </button>
+                            ))}
+                            <div className="pt-4 pb-2 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Management</div>
+                            <button onClick={() => setView('applications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${view === 'applications' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}><Icon name="file-text" size={16} /> Applications</button>
+                        </nav>
+                        <button onClick={() => { sessionStorage.clear(); window.location.reload(); }} className="p-4 text-red-400 hover:bg-gray-900 flex gap-2 items-center border-t border-gray-800"><Icon name="log-out" size={16} /> Logout</button>
+                    </aside>
+
+                    <main className="flex-1 flex flex-col overflow-hidden relative">
+                        <header className="h-16 border-b border-gray-800 flex items-center justify-between px-8 bg-gray-900/50 backdrop-blur">
+                            <h2 className="text-xl font-bold capitalize text-white">{view}</h2>
+                            {view !== 'dashboard' && (
+                                <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        <Icon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="bg-gray-800 border border-gray-700 text-sm text-white rounded-lg pl-9 pr-4 py-2 focus:border-blue-500 outline-none w-64"
+                                        />
+                                    </div>
+                                    {view !== 'applications' && (
+                                        <button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2">
+                                            <Icon name="plus" size={16} /> Add New
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </header>
+
+                        <div className="flex-1 overflow-auto p-8">
+                            {view === 'dashboard' ? (
+                                <div className="space-y-8">
+                                    <div className="bg-gray-900 p-8 rounded-2xl border border-gray-800 flex flex-col md:flex-row items-center justify-between gap-6">
+                                        <div>
+                                            <h3 className="text-2xl font-bold text-white mb-2">Enrollment Status</h3>
+                                            <p className="text-gray-400">Controls the visibility of the "Join Chapter" buttons.</p>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${enrollmentStatus ? 'bg-green-900 text-green-300 border border-green-700' : 'bg-red-900 text-red-300 border border-red-700'}`}>
+                                                {enrollmentStatus ? 'Active' : 'Closed'}
+                                            </div>
+                                            <button onClick={toggleEnrollment} className={`px-6 py-3 rounded-xl font-bold transition-all shadow-lg ${enrollmentStatus ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-green-600 hover:bg-green-500 text-white'}`}>
+                                                {enrollmentStatus ? 'Stop Enrollment' : 'Start Enrollment'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                        {[
+                                            { label: 'Total Projects', val: dashboardStats.projects, icon: 'folder', color: 'text-blue-500' },
+                                            { label: 'Events Hosted', val: dashboardStats.events, icon: 'calendar', color: 'text-purple-500' },
+                                            { label: 'Active Members', val: dashboardStats.team_members, icon: 'users', color: 'text-green-500' },
+                                            { label: 'Applications', val: dashboardStats.applications, icon: 'file-text', color: 'text-yellow-500' }
+                                        ].map((stat, i) => (
+                                            <div key={i} className="bg-gray-900 p-6 rounded-xl border border-gray-800 hover:border-gray-700 transition">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className={`p-3 rounded-lg bg-gray-800 ${stat.color}`}><Icon name={stat.icon} size={24} /></div>
+                                                    <span className="text-3xl font-bold text-white">{stat.val || 0}</span>
+                                                </div>
+                                                <div className="text-sm text-gray-400">{stat.label}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <DataTable
+                                    onEdit={view === 'applications' ? null : (item) => openModal(item)}
+                                    onDelete={handleDelete}
+                                    columns={
+                                        view === 'projects' ? [
+                                            { key: 'title', label: 'Title' },
+                                            { key: 'category', label: 'Category' },
+                                            { key: 'technologies', label: 'Tech', type: 'array' }
+                                        ] : view === 'team' ? [
+                                            { key: 'image_url', label: 'Photo', type: 'image' },
+                                            { key: 'name', label: 'Name' },
+                                            { key: 'team_role', label: 'Role' },
+                                            { key: 'is_active', label: 'Active', type: 'bool' }
+                                        ] : view === 'alumni' ? [
+                                            { key: 'image_url', label: 'Photo', type: 'image' },
+                                            { key: 'name', label: 'Name' },
+                                            { key: 'graduation_year', label: 'Class of' },
+                                            { key: 'job_title', label: 'Current Role' }
+                                        ] : view === 'applications' ? [
+                                            { key: 'name', label: 'Student Name' },
+                                            { key: 'email', label: 'Email' },
+                                            { key: 'branch', label: 'Branch' },
+                                            { key: 'year', label: 'Year' },
+                                            { key: 'motivation', label: 'Motivation' }
+                                        ] : view === 'gallery' ? [
+                                            { key: 'title', label: 'Album' },
+                                            { key: 'event_date', label: 'Date' }
+                                        ] : view === 'partners' ? [
+                                            { key: 'logo_url', label: 'Logo', type: 'image' },
+                                            { key: 'name', label: 'Partner' }
+                                        ] : view === 'timeline' ? [
+                                            { key: 'year', label: 'Year' },
+                                            { key: 'title', label: 'Event' }
+                                        ] : [{ key: 'id', label: 'ID' }, { key: 'title', label: 'Title' }]
+                                    }
+                                    data={filteredData}
+                                />
+                            )}
+                        </div>
+                    </main>
+
+                    {isModalOpen && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                            <div className="bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-800">
+                                <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-gray-900">
+                                    <h3 className="text-xl font-bold text-white">{editingItem.id ? 'Edit' : 'Create'} {view}</h3>
+                                    <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white"><Icon name="x" /></button>
+                                </div>
+                                <div className="p-6 overflow-y-auto custom-scrollbar bg-gray-900/50">
+                                    <form id="editForm" onSubmit={handleSave} className="grid grid-cols-1 gap-5">
+                                        {/* --- Form Fields based on View --- */}
+                                        {view === 'projects' && <>
+                                            <input name="title" value={editingItem.title || ''} onChange={e => handleFormChange('title', e.target.value)} placeholder="Project Title" className="input-field" required />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="category" value={editingItem.category || ''} onChange={e => handleFormChange('category', e.target.value)} placeholder="Category" className="input-field" />
+                                                <input name="status" value={editingItem.status || ''} onChange={e => handleFormChange('status', e.target.value)} placeholder="Status" className="input-field" />
+                                            </div>
+                                            <textarea name="description" value={editingItem.description || ''} onChange={e => handleFormChange('description', e.target.value)} placeholder="Description" className="input-field h-24" />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div><label className="text-xs text-gray-500">Tech Stack (comma separated)</label><input name="technologies" value={editingItem.technologies || ''} onChange={e => handleFormChange('technologies', e.target.value)} className="input-field" /></div>
+                                                <div><label className="text-xs text-gray-500">Contributors (comma separated)</label><input name="contributors" value={editingItem.contributors || ''} onChange={e => handleFormChange('contributors', e.target.value)} className="input-field" /></div>
+                                            </div>
+                                            <input name="github_url" value={editingItem.github_url || ''} onChange={e => handleFormChange('github_url', e.target.value)} placeholder="GitHub URL" className="input-field" />
+                                        </>}
+
+                                        {view === 'team' && <>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="name" value={editingItem.name || ''} onChange={e => handleFormChange('name', e.target.value)} placeholder="Full Name" className="input-field" required />
+                                                <input name="team_role" value={editingItem.team_role || ''} onChange={e => handleFormChange('team_role', e.target.value)} placeholder="Role" className="input-field" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="department" value={editingItem.department || ''} onChange={e => handleFormChange('department', e.target.value)} placeholder="Department" className="input-field" />
+                                                <input name="bio" value={editingItem.bio || ''} onChange={e => handleFormChange('bio', e.target.value)} placeholder="Short Bio" className="input-field" />
+                                            </div>
+                                            <input name="linkedin_url" value={editingItem.linkedin_url || ''} onChange={e => handleFormChange('linkedin_url', e.target.value)} placeholder="LinkedIn URL" className="input-field" />
+                                            <div className="flex items-center gap-3 bg-gray-800 p-3 rounded">
+                                                <input type="checkbox" name="is_active" checked={editingItem.is_active || false} onChange={e => handleFormChange('is_active', e.target.checked)} className="w-5 h-5 accent-blue-600" />
+                                                <label className="text-sm text-gray-300">Active Member</label>
+                                            </div>
+                                            <div className="bg-gray-800 p-4 rounded border border-gray-700 mt-2">
+                                                <label className="text-sm text-gray-400 mb-2 block">Profile Photo</label>
+                                                <div className="flex gap-4 items-center">
+                                                    <div className="w-12 h-12 bg-gray-700 rounded-full overflow-hidden border border-gray-600">
+                                                        {editingItem.image_url ? <img src={editingItem.image_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Icon name="user" /></div>}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <input name="image_url" value={editingItem.image_url || ''} readOnly placeholder="Image URL (Upload to preview)" className="input-field mb-2 text-gray-500 cursor-not-allowed" />
+                                                        <FileUploadButton onFileSelect={(file, url) => handleMainFileSelect('image_url', file, url)} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>}
+
+                                        {view === 'alumni' && <>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="name" value={editingItem.name || ''} onChange={e => handleFormChange('name', e.target.value)} placeholder="Alumni Name" className="input-field" required />
+                                                <input name="graduation_year" value={editingItem.graduation_year || ''} onChange={e => handleFormChange('graduation_year', e.target.value)} placeholder="Graduation Year (e.g. 2023)" className="input-field" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="job_title" value={editingItem.job_title || ''} onChange={e => handleFormChange('job_title', e.target.value)} placeholder="Current Job Title" className="input-field" />
+                                                <input name="linkedin_url" value={editingItem.linkedin_url || ''} onChange={e => handleFormChange('linkedin_url', e.target.value)} placeholder="LinkedIn URL" className="input-field" />
+                                            </div>
+                                            <textarea name="quote" value={editingItem.quote || ''} onChange={e => handleFormChange('quote', e.target.value)} placeholder="Alumni Quote" className="input-field h-24" />
+                                            <div className="bg-gray-800 p-4 rounded border border-gray-700 mt-2">
+                                                <label className="text-sm text-gray-400 mb-2 block">Profile Photo</label>
+                                                <div className="flex gap-4 items-center">
+                                                    <div className="w-12 h-12 bg-gray-700 rounded-full overflow-hidden border border-gray-600">
+                                                        {editingItem.image_url ? <img src={editingItem.image_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Icon name="user" /></div>}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <input name="image_url" value={editingItem.image_url || ''} readOnly placeholder="Image URL (Upload to preview)" className="input-field mb-2 text-gray-500 cursor-not-allowed" />
+                                                        <FileUploadButton onFileSelect={(file, url) => handleMainFileSelect('image_url', file, url)} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>}
+
+                                        {view === 'gallery' && <>
+                                            <input name="title" value={editingItem.title || ''} onChange={e => handleFormChange('title', e.target.value)} placeholder="Album Title" className="input-field" required />
+                                            <input type="date" name="event_date" value={editingItem.event_date || ''} onChange={e => handleFormChange('event_date', e.target.value)} className="input-field" />
+                                            <textarea name="description" value={editingItem.description || ''} onChange={e => handleFormChange('description', e.target.value)} placeholder="Album Description" className="input-field h-24" />
+                                        </>}
+
+                                        {view === 'timeline' && <>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <input name="year" value={editingItem.year || ''} onChange={e => handleFormChange('year', e.target.value)} placeholder="Year" className="input-field" required />
+                                                <div className="col-span-2"><input name="title" value={editingItem.title || ''} onChange={e => handleFormChange('title', e.target.value)} placeholder="Event Title" className="input-field" required /></div>
+                                            </div>
+                                            <textarea name="description" value={editingItem.description || ''} onChange={e => handleFormChange('description', e.target.value)} placeholder="Description" className="input-field h-24" />
+                                        </>}
+
+                                        {view === 'partners' && <>
+                                            <input name="name" value={editingItem.name || ''} onChange={e => handleFormChange('name', e.target.value)} placeholder="Partner Name" className="input-field" required />
+                                            <input name="website_url" value={editingItem.website_url || ''} onChange={e => handleFormChange('website_url', e.target.value)} placeholder="Website URL" className="input-field" />
+                                            <div className="bg-gray-800 p-4 rounded border border-gray-700 mt-2">
+                                                <label className="text-sm text-gray-400 mb-2 block">Logo</label>
+                                                <div className="flex gap-4 items-center">
+                                                    <div className="w-16 h-16 bg-white rounded flex items-center justify-center overflow-hidden border border-gray-600">{editingItem.logo_url ? <img src={editingItem.logo_url} className="w-full h-full object-contain" /> : <Icon name="image" className="text-gray-400" />}</div>
+                                                    <div className="flex-1">
+                                                        <input name="logo_url" value={editingItem.logo_url || ''} readOnly placeholder="Logo URL (Upload to preview)" className="input-field mb-2 text-gray-500 cursor-not-allowed" />
+                                                        <FileUploadButton onFileSelect={(file, url) => handleMainFileSelect('logo_url', file, url)} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>}
+
+                                        {view === 'achievements' && <>
+                                            <input name="title" value={editingItem.title || ''} onChange={e => handleFormChange('title', e.target.value)} placeholder="Achievement Title" className="input-field" required />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <input name="icon" value={editingItem.icon || ''} onChange={e => handleFormChange('icon', e.target.value)} placeholder="Icon Name (e.g. award)" className="input-field" />
+                                                <input name="link" value={editingItem.link || ''} onChange={e => handleFormChange('link', e.target.value)} placeholder="Link URL" className="input-field" />
+                                            </div>
+                                            <textarea name="description" value={editingItem.description || ''} onChange={e => handleFormChange('description', e.target.value)} placeholder="Description" className="input-field h-24" />
+                                        </>}
+
+                                        {view === 'events' && <>
+                                            <input name="title" value={editingItem.title || ''} onChange={e => handleFormChange('title', e.target.value)} placeholder="Event Title" className="input-field" required />
+                                            <input type="date" name="event_date" value={editingItem.event_date || ''} onChange={e => handleFormChange('event_date', e.target.value)} className="input-field" />
+                                            <input name="location" value={editingItem.location || ''} onChange={e => handleFormChange('location', e.target.value)} placeholder="Location" className="input-field" />
+                                            <textarea name="description" value={editingItem.description || ''} onChange={e => handleFormChange('description', e.target.value)} placeholder="Description" className="input-field h-24" />
+                                            <input name="redirect_url" value={editingItem.redirect_url || ''} onChange={e => handleFormChange('redirect_url', e.target.value)} placeholder="Registration Link" className="input-field" />
+                                        </>}
+
+                                        <div className="flex justify-end pt-4 border-t border-gray-800">
+                                            <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                {saving ? <div className="loader w-4 h-4 border-2"></div> : <Icon name="save" size={18} />}
+                                                {saving ? 'Saving...' : 'Save Details'}
+                                            </button>
+                                        </div>
+                                    </form>
+
+                                    {(view === 'projects' || view === 'events' || view === 'gallery') && (
+                                        <MediaManager
+                                            entityType={view === 'gallery' ? 'GALLERY' : view.slice(0, -1).toUpperCase()}
+                                            entityId={editingItem.id}
+                                            supabase={client}
+                                            items={galleryItems}
+                                            onItemsChange={setGalleryItems}
+                                            onDeletedIdsChange={(id) => setGalleryDeletedIds(prev => [...prev, id])}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {toast && <div className={`fixed bottom-6 right-6 px-6 py-3 rounded shadow-xl text-white font-bold z-50 slide-in ${toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'}`}>{toast.msg}</div>}
+                </div>
+            );
+        };
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+    <style>
+        .input-field {
+            width: 100%;
+            background-color: #111827;
+            border: 1px solid #374151;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .input-field:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .input-field::placeholder {
+            color: #6b7280;
+        }
+    </style>
+</body>
+
+</html>

@@ -6,105 +6,128 @@ import * as THREE from 'three';
 import {
   LoadingScreen, Navbar, HeroSection, VisionSection, TimelineSection,
   ProjectsSection, EventsSection, AchievementsSection, TeamSection, AlumniSection,
-  GalleryComponent, Footer, ApplicationModal, DetailsModal, SdgSection, PartnersSection,
-  FullscreenViewer
+  GalleryComponent, Footer, ApplicationModal, DetailsModal, SdgSection,
+  FullscreenViewer, ScrollToTop,
+  PartnersSection
 } from '../components/main';
 
 import {
-  socialMedia, sdgData,
-  // Import new static data
-  timelineEvents, achievements, alumni, galleryData, projectsData, teamData, partnersData, pastEvents
+  socialMedia, sdgData
 } from '../lib/data';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
 
-  // We initialize the state with the Static Data immediately
+  // 1. App Data State
   const [appData, setAppData] = useState({
-    timelineEvents,
-    achievements,
-    alumni,
-    galleryData,
-    projectsData,
-    teamData,
-    partnersData,
-    eventsData: {
-      upcoming: [], // This will be fetched
-      past: pastEvents // This is static
-    }
+    timelineEvents: [],
+    achievements: [],
+    partnersData: [],
+    alumni: [],
+    galleryData: [],
+    projectsData: [],
+    teamData: [],
+    eventsData: { upcoming: [], past: [] }
   });
 
   const canvasRef = useRef(null);
+
+  // 2. UI States
   const [detailsModal, setDetailsModal] = useState({ isOpen: false, type: '', data: null });
   const [isApplyModalOpen, setApplicationModalOpen] = useState(false);
-
-  const [fullscreenViewer, setFullscreenViewer] = useState({
-    isOpen: false,
-    gallery: [],
-    startIndex: 0,
-  });
-
+  const [fullscreenViewer, setFullscreenViewer] = useState({ isOpen: false, gallery: [], startIndex: 0 });
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isEnrollmentOpen, setIsEnrollmentOpen] = useState<boolean | null>(null);
+  const [isEnrollmentOpen, setIsEnrollmentOpen] = useState(false);
 
-  const openFullscreenViewer = (gallery, startIndex = 0) => {
-    setFullscreenViewer({
-      isOpen: true,
-      gallery: gallery.map(img => typeof img === 'string' ? img : img.src),
-      startIndex,
-    });
-  };
-
-  // 1. & 2. Fetch ALL Dynamic Data (Events & Button Status) in parallel
+  // --- Initial Data Load ---
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        // Fetch Content (Heavy) and Button (Light) in parallel
-        const [contentResponse, buttonResponse] = await Promise.all([
-          fetch('/api/content'),       // <--- The new consolidated API
-          fetch('/api/button-status')  // <--- Kept separate as requested
-        ]);
-
-        // A. Handle Consolidated Content (Events + Gallery)
-        if (contentResponse.ok) {
-          const data = await contentResponse.json();
-
+        const contentRes = await fetch('/api/content').catch(() => null);
+        if (contentRes && contentRes.ok) {
+          const data = await contentRes.json();
           setAppData(prev => ({
             ...prev,
+            projectsData: data.projectsData || [],
             galleryData: data.gallery || [],
             eventsData: {
               upcoming: data.events?.upcoming || [],
               past: data.events?.past || []
-            }
+            },
+            teamData: data.team || [],
+            alumni: data.alumni || [],
+            timelineEvents: data.timelineEvents || [],
+            achievements: data.achievements || [],
+            partnersData: data.partnersData || []
           }));
-        } else {
-          console.error("Failed to load content");
         }
 
-        // B. Handle Button Status
-        if (buttonResponse.ok) {
-          const buttonData = await buttonResponse.json();
-          setIsEnrollmentOpen(buttonData.enabled);
-        } else {
-          setIsEnrollmentOpen(false);
+        const btnRes = await fetch('/api/button-status').catch(() => null);
+        if (btnRes && btnRes.ok) {
+          const btnData = await btnRes.json();
+          setIsEnrollmentOpen(btnData.enabled);
         }
-
       } catch (error) {
-        console.error("Error loading data:", error);
+        console.error("Data load error:", error);
       } finally {
-        // Remove loading screen when both are done
         setTimeout(() => setIsLoading(false), 1000);
       }
     };
-
     loadAllData();
   }, []);
 
-  // 3. Three.js Background Animation
+  // --- HELPER: Generic Fetcher for Details ---
+  const fetchFullDetailsIfNeeded = async (item, type) => {
+    const currentImgCount = item.images?.length || 0;
+    const totalImgCount = item.totalImages || 0;
+
+    if (totalImgCount > currentImgCount && !item.detailsLoaded) {
+      try {
+        const res = await fetch(`/api/content?type=${type}_details&id=${item.id}`);
+        if (res.ok) {
+          const fullData = await res.json();
+          return { ...item, ...fullData, detailsLoaded: true };
+        }
+      } catch (e) {
+        console.error(`Failed to fetch details for ${type}`, e);
+      }
+    }
+    return item;
+  };
+
+  // --- Show Details Handler ---
+  const handleShowDetails = async (type, data) => {
+    setDetailsModal({ isOpen: true, type, data });
+    const fullData = await fetchFullDetailsIfNeeded(data, type);
+    if (fullData.detailsLoaded && fullData !== data) {
+      setDetailsModal(prev => ({ ...prev, data: fullData }));
+    }
+  };
+
+  // --- Gallery Click Handler ---
+  const handleGalleryClick = async (item) => {
+    let imagesToShow = item.images;
+    setFullscreenViewer({
+      isOpen: true,
+      gallery: imagesToShow.map(img => typeof img === 'string' ? img : img.src),
+      startIndex: 0
+    });
+    const fullItem = await fetchFullDetailsIfNeeded(item, 'gallery');
+    if (fullItem.detailsLoaded && fullItem.images.length > imagesToShow.length) {
+      setFullscreenViewer(prev => ({
+        ...prev,
+        gallery: fullItem.images.map(img => typeof img === 'string' ? img : img.src)
+      }));
+      setAppData(prev => ({
+        ...prev,
+        galleryData: prev.galleryData.map(g => g.id === item.id ? fullItem : g)
+      }));
+    }
+  };
+
+  // --- Three.js Background ---
   useEffect(() => {
     if (!canvasRef.current || !THREE) return;
-
-    const isMobile = window.innerWidth <= 768;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, alpha: true });
@@ -112,35 +135,36 @@ export default function Home() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     camera.position.z = 5;
 
-    const particleCount = isMobile ? 50 : 100;
+    const palette = [
+      new THREE.Color('#059669'), new THREE.Color('#06b6d4'),
+      new THREE.Color('#34d399'), new THREE.Color('#22d3ee')
+    ];
+
+    const particleCount = window.innerWidth <= 768 ? 60 : 150;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
     const colors = new Float32Array(particleCount * 3);
 
-    for (let i = 0; i < particleCount * 3; i += 3) {
-      positions[i] = (Math.random() - 0.5) * 20;
-      positions[i + 1] = (Math.random() - 0.5) * 20;
-      positions[i + 2] = (Math.random() - 0.5) * 20;
-      colors[i] = 0.02; colors[i + 1] = 0.59; colors[i + 2] = 0.41;
+    for (let i = 0; i < particleCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 25;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 25;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 25;
+      const color = palette[Math.floor(Math.random() * palette.length)];
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
     }
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-
-    const material = new THREE.PointsMaterial({
-      size: isMobile ? 0.02 : 0.05,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-    });
-
+    const material = new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: 0.8 });
     const particles = new THREE.Points(geometry, material);
     scene.add(particles);
 
     const animate = () => {
       requestAnimationFrame(animate);
-      particles.rotation.x += 0.0005;
-      particles.rotation.y += 0.001;
+      particles.rotation.y += 0.0005;
+      particles.rotation.x += 0.0002;
       renderer.render(scene, camera);
     };
     animate();
@@ -152,48 +176,77 @@ export default function Home() {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-
-  }, []); // Removed appData dependency since particles don't depend on data
+  }, []);
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 100);
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleShowDetails = (type, data) => setDetailsModal({ isOpen: true, type, data });
-  const scrollToTop = () => { window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  return (
-    <div className="App text-white">
-      <canvas ref={canvasRef} id="bg-canvas" className="fixed top-0 left-0 w-full h-full -z-10" />
-      <LoadingScreen isLoading={isLoading} />
+  const openFullscreenViewer = (gallery, startIndex = 0) => {
+    setFullscreenViewer({
+      isOpen: true,
+      gallery: gallery.map(img => typeof img === 'string' ? img : img.src),
+      startIndex
+    });
+  };
 
-      {/* Render immediately since we have static data, just wait for ThreeJS/hydration */}
+  // Helper boolean to check if ANY events exist
+  const hasEvents = appData.eventsData.upcoming.length > 0 || appData.eventsData.past.length > 0;
+
+  return (
+    <div className="App transition-colors duration-300">
+      <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full -z-10 opacity-30 pointer-events-none" />
+      <LoadingScreen isLoading={isLoading} />
       <Navbar isScrolled={isScrolled} />
       <main>
         <HeroSection onJoinClick={() => setApplicationModalOpen(true)} isEnrollmentOpen={isEnrollmentOpen} />
-        <VisionSection />
-        <AchievementsSection achievements={appData.achievements} />
-        <SdgSection sdgs={sdgData} />
-        <ProjectsSection projects={appData.projectsData} onShowDetails={handleShowDetails} />
-        <EventsSection events={appData.eventsData} onShowDetails={handleShowDetails} />
-        <TimelineSection timelineEvents={appData.timelineEvents} />
-        <TeamSection teamMembers={appData.teamData} onShowDetails={handleShowDetails} />
-        <AlumniSection alumni={appData.alumni} onShowDetails={handleShowDetails} />
-        <PartnersSection partners={appData.partnersData} />
-        <GalleryComponent galleryItems={appData.galleryData} onImageClick={(img, gallery, index) => openFullscreenViewer(gallery, index)} />
-      </main>
 
+        {/* Vision is static content, kept visible */}
+        <VisionSection />
+
+        {/* Conditionally Render Sections based on Data Availability */}
+        {appData.achievements.length > 0 && (
+          <AchievementsSection achievements={appData.achievements} />
+        )}
+
+        {/* SDG is static data from file, kept visible */}
+        <SdgSection sdgs={sdgData} />
+
+        {appData.projectsData.length > 0 && (
+          <ProjectsSection projects={appData.projectsData} onShowDetails={handleShowDetails} />
+        )}
+
+        {hasEvents && (
+          <EventsSection events={appData.eventsData} onShowDetails={handleShowDetails} />
+        )}
+
+        {appData.timelineEvents.length > 0 && (
+          <TimelineSection timelineEvents={appData.timelineEvents} />
+        )}
+
+        {appData.teamData.length > 0 && (
+          <TeamSection teamMembers={appData.teamData} onShowDetails={handleShowDetails} />
+        )}
+
+        {appData.alumni.length > 0 && (
+          <AlumniSection alumni={appData.alumni} onShowDetails={handleShowDetails} />
+        )}
+
+        {appData.partnersData.length > 0 && (
+          <PartnersSection partners={appData.partnersData} />
+        )}
+
+        {appData.galleryData.length > 0 && (
+          <GalleryComponent
+            galleryItems={appData.galleryData}
+            onGalleryClick={handleGalleryClick}
+          />
+        )}
+      </main>
       <Footer socialLinks={socialMedia} />
-      <button
-        onClick={scrollToTop}
-        className={`fixed bottom-6 right-6 p-3 bg-primary rounded-full shadow-lg z-50 transition-all duration-300 hover:bg-green-700 focus:outline-none ${isScrolled ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
-        aria-label="Scroll to top"
-      >
-        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-        </svg>
-      </button>
+      <ScrollToTop />
       <ApplicationModal isOpen={isApplyModalOpen} onClose={() => setApplicationModalOpen(false)} />
 
       <DetailsModal
@@ -203,6 +256,7 @@ export default function Home() {
         data={detailsModal.data}
         onImageClick={(img, gallery, index) => openFullscreenViewer(gallery, index)}
       />
+
       {fullscreenViewer.isOpen && (
         <FullscreenViewer
           gallery={fullscreenViewer.gallery}

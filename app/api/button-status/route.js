@@ -1,76 +1,32 @@
-export const dynamic = 'force-dynamic';
-
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-function getSupabaseClient() {
-    return createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY,
-        { auth: { persistSession: false } }
-    );
-}
+export const dynamic = 'force-dynamic';
 
-// Public GET function: Reads the status from the dedicated table
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export async function GET() {
     try {
-        const supabase = getSupabaseClient();
+        // FIX: Query 'site_config' table instead of 'enrollment_status'
         const { data, error } = await supabase
-            .from('enrollment_status')
-            .select('enabled')
-            .limit(1)
+            .from('site_config')
+            .select('value_boolean')
+            .eq('key_name', 'enrollment_open')
             .single();
 
         if (error) {
-            // PGRST116 (No rows found) might mean the table is empty.
-            if (error.code === 'PGRST116' || error.message.includes('No rows found')) {
-                // Default to true if the table is empty
-                return NextResponse.json({ enabled: true });
-            }
-            throw error;
+            // If the row doesn't exist yet, just log it and return false (don't crash)
+            console.error('Button Status DB Error (Table or Row missing):', error.message);
+            return NextResponse.json({ enabled: false });
         }
 
-        // The data object will be { enabled: true/false }
-        return NextResponse.json({ enabled: data.enabled });
+        return NextResponse.json({ enabled: data?.value_boolean ?? false });
 
     } catch (error) {
-        console.error('GET Error:', error);
-        // Fallback to enabled on server error
-        return NextResponse.json({ enabled: true }, { status: 200 });
-    }
-}
-
-// Admin POST function: Updates the status in the dedicated table
-export async function POST(req) {
-    try {
-        // --- ADMIN KEY CHECK ---
-        const adminKey = req.headers.get('x-admin-key');
-        if (adminKey !== process.env.ADMIN_KEY) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const supabaseAdmin = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY,
-            { auth: { persistSession: false } }
-        );
-
-        // Get the new state from the request body
-        const { enabled } = await req.json(); // Expecting { "enabled": true/false }
-
-        const { error } = await supabaseAdmin
-            .from('enrollment_status')
-            .update({ enabled: enabled })
-            .eq('id', 1); // Assuming you always update the first (and only) row
-
-        if (error) {
-            throw error;
-        }
-
-        return NextResponse.json({ ok: true });
-
-    } catch (error) {
-        console.error('POST Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('Button Status API Error:', error);
+        return NextResponse.json({ enabled: false }, { status: 500 });
     }
 }

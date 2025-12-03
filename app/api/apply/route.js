@@ -1,62 +1,49 @@
-// app/api/apply/route.js
-
 import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server'; // Import NextResponse
+import { NextResponse } from 'next/server';
 
-export async function POST(req) {
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export async function POST(request) {
     try {
-        // This is a SERVER-ONLY Supabase client with admin privileges
-        const supabaseAdmin = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY,
-            { auth: { persistSession: false } }
-        );
+        const body = await request.json();
 
-        const body = await req.json();
+        // Destructure fields to ensure we only insert what we expect
+        const { name, email, phone, prn, branch, year, motivation, experience } = body;
 
-        // Your validation is good!
-        const required = ['name', 'email', 'phone', 'prn', 'branch', 'year', 'motivation'];
-        for (const k of required) {
-            if (!body[k]) {
-                return NextResponse.json({ error: `${k} is required` }, { status: 400 });
-            }
-        }
-
-        const insertObj = {
-            name: body.name,
-            email: body.email,
-            phone: body.phone,
-            prn: body.prn,
-            branch: body.branch,
-            year: body.year,
-            motivation: body.motivation,
-            experience: body.experience || null
-        };
-
-        const { error } = await supabaseAdmin.from('applications').insert(insertObj);
-
-        if (error) {
-            console.error('Supabase Insert Error:', error);
-
-            // Check for the specific "duplicate key" error code
-            if (error.code === '23505') {
-                return NextResponse.json(
-                    { message: 'A user with this PRN has already applied. if not you, DM us on our social media at bottom' },
-                    { status: 409 } // 409 Conflict is the correct status for a duplicate
-                );
-            }
-
-            // For all other database errors, return a generic server error
+        // Basic Validation
+        if (!name || !email || !prn || !branch) {
             return NextResponse.json(
-                { message: 'Could not submit application due to a database error.' },
-                { status: 500 }
+                { error: 'Missing required fields' },
+                { status: 400 }
             );
         }
-        // Send a success response
-        return NextResponse.json({ message: 'Application submitted successfully!' }, { status: 201 });
 
-    } catch (e) {
-        console.error('API Route Error:', e);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        // Insert into Supabase
+        const { data, error } = await supabase
+            .from('applications')
+            .insert([
+                { name, email, phone, prn, branch, year, motivation, experience }
+            ])
+            .select();
+
+        if (error) {
+            console.error('Supabase Error:', error);
+            return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        return NextResponse.json(
+            { message: 'Application submitted successfully', data },
+            { status: 200 }
+        );
+
+    } catch (err) {
+        console.error('Server Error:', err);
+        return NextResponse.json(
+            { error: 'Internal Server Error' },
+            { status: 500 }
+        );
     }
 }

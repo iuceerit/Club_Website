@@ -1,110 +1,195 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-
-const getFirstImage = (images, fallback = 'https://placehold.co/400x300/1f2937/FFFFFF?text=No+Image') => {
-    if (!images || !Array.isArray(images) || images.length === 0) {
-        return fallback;
-    }
+// ---------- Helpers ----------
+const getFirstImage = (images, fallback = 'https://placehold.co/400x300/e2e8f0/1e293b?text=No+Image') => {
+    if (!images || !Array.isArray(images) || images.length === 0) return fallback;
     return images[0] || fallback;
 };
 
-const safeGet = (obj, path, fallback = 'Data not available') => {
-    return obj?.[path] ?? fallback;
+const safeGet = (obj, path, fallback = 'Data not available') => obj?.[path] ?? fallback;
+
+// ---------- Scroll To Top Component ----------
+export const ScrollToTop = () => {
+    const [isVisible, setIsVisible] = useState(false);
+
+    useEffect(() => {
+        const toggleVisibility = () => {
+            if (window.scrollY > 300) {
+                setIsVisible(true);
+            } else {
+                setIsVisible(false);
+            }
+        };
+        window.addEventListener('scroll', toggleVisibility);
+        return () => window.removeEventListener('scroll', toggleVisibility);
+    }, []);
+
+    const scrollToTop = () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    };
+
+    return (
+        <button
+            onClick={scrollToTop}
+            className={`scroll-to-top ${isVisible ? 'visible' : ''}`}
+            aria-label="Scroll to top"
+        >
+            ↑
+        </button>
+    );
 };
 
+// ---------- Theme Toggle Component ----------
+const ThemeToggle = () => {
+    const [isDark, setIsDark] = useState(false);
+
+    useEffect(() => {
+        const hasDarkClass = document.documentElement.classList.contains('dark');
+        setIsDark(hasDarkClass);
+    }, []);
+
+    const toggleTheme = () => {
+        const root = document.documentElement;
+        const newIsDark = !isDark;
+
+        if (newIsDark) {
+            root.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            root.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+        setIsDark(newIsDark);
+    };
+
+    return (
+        <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-xl"
+            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            aria-label="Toggle Theme"
+        >
+            {isDark ? '🌙' : '☀️'}
+        </button>
+    );
+};
+
+// ---------- Marquee Scroller Component ----------
+const MarqueeScroller = ({ items, direction = 'left', renderItem, speed = 1 }) => {
+    const scrollerRef = useRef(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const requestRef = useRef();
+    const scrollPosRef = useRef(0);
+    const isInitializedRef = useRef(false);
+
+    // Duplicate items to ensure seamless loop
+    const safeItems = items && items.length > 0 ? items : [];
+    const duplicatedItems = [...safeItems, ...safeItems, ...safeItems, ...safeItems, ...safeItems, ...safeItems];
+
+    useEffect(() => {
+        const scroller = scrollerRef.current;
+        if (!scroller) return;
+
+        isInitializedRef.current = false;
+        scrollPosRef.current = scroller.scrollLeft;
+
+        const animate = () => {
+            if (!isDragging) {
+                const maxScroll = scroller.scrollWidth;
+                const clientWidth = scroller.clientWidth;
+                const resetPoint = maxScroll / 2;
+
+                if (maxScroll <= clientWidth) {
+                    requestRef.current = requestAnimationFrame(animate);
+                    return;
+                }
+
+                if (direction === 'left') {
+                    scrollPosRef.current += speed;
+                    if (scrollPosRef.current >= resetPoint) {
+                        scrollPosRef.current = 0;
+                    }
+                } else {
+                    if (!isInitializedRef.current && scrollPosRef.current < 1) {
+                        scrollPosRef.current = resetPoint;
+                        scroller.scrollLeft = resetPoint;
+                        isInitializedRef.current = true;
+                    }
+                    scrollPosRef.current -= speed;
+                    if (scrollPosRef.current <= 0) {
+                        scrollPosRef.current = resetPoint;
+                    }
+                }
+                scroller.scrollLeft = scrollPosRef.current;
+            } else {
+                scrollPosRef.current = scroller.scrollLeft;
+            }
+            requestRef.current = requestAnimationFrame(animate);
+        };
+
+        requestRef.current = requestAnimationFrame(animate);
+        return () => cancelAnimationFrame(requestRef.current);
+    }, [direction, isDragging, speed, safeItems.length]);
+
+    const handleMouseDown = () => setIsDragging(true);
+    const handleMouseUp = () => setIsDragging(false);
+    const handleTouchStart = () => setIsDragging(true);
+    const handleTouchEnd = () => setIsDragging(false);
+
+    return (
+        <div
+            className="marquee-container py-4"
+            ref={scrollerRef}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+        >
+            <div className="marquee-content">
+                {duplicatedItems.map((item, index) => (
+                    <div key={`${index}-${item.id || item.name || Math.random()}`} className="marquee-card">
+                        {renderItem(item)}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 // ---------- FullscreenViewer ----------
 export const FullscreenViewer = ({ gallery, startIndex, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
-    const touchStartX = useRef(0);
-    const touchDeltaX = useRef(0); // For tracking swipe movement in real-time
-
-    const handleNext = React.useCallback(() => {
-        setCurrentIndex(prev => (prev + 1) % gallery.length);
-    }, [gallery.length]);
-
-    const handlePrev = React.useCallback(() => {
-        setCurrentIndex(prev => (prev - 1 + gallery.length) % gallery.length);
-    }, [gallery.length]);
-
-    // Handle touch events for mobile swipe
-    const handleTouchStart = (e) => {
-        touchStartX.current = e.targetTouches[0].clientX;
-        touchDeltaX.current = 0;
-    };
-
-    const handleTouchMove = (e) => {
-        touchDeltaX.current = e.targetTouches[0].clientX - touchStartX.current;
-    };
-
-    const handleTouchEnd = () => {
-        // Check if the swipe distance is significant
-        if (Math.abs(touchDeltaX.current) > 50) {
-            if (touchDeltaX.current > 0) { // Swipe right
-                handlePrev();
-            } else { // Swipe left
-                handleNext();
-            }
-        }
-        touchDeltaX.current = 0; // Reset for the next touch
-    };
 
     useEffect(() => {
-        setCurrentIndex(startIndex);
-    }, [startIndex, gallery]);
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [onClose]);
+
+    const handleNext = () => setCurrentIndex(prev => (prev + 1) % gallery.length);
+    const handlePrev = () => setCurrentIndex(prev => (prev - 1 + gallery.length) % gallery.length);
 
     if (!gallery || gallery.length === 0) return null;
 
     return (
-        <div
-            className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center overflow-hidden"
-            onClick={onClose}
-        >
-            {/* Close Button */}
-            <button
-                className="fullscreen-nav-btn absolute top-4 right-4 text-3xl z-20"
-                onClick={onClose}
-            >
-                &times;
-            </button>
+        <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center" onClick={onClose}>
+            <button className="absolute top-4 right-4 text-white text-4xl z-20 hover:text-red-500 transition-colors" onClick={onClose}>&times;</button>
+            <button className="absolute left-4 text-white text-5xl hidden md:block z-20 hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); handlePrev(); }}>&#x2039;</button>
 
-            {/* Previous Button - hidden on mobile (screens smaller than md) */}
-            <button
-                className="fullscreen-nav-btn left-4 text-4xl hidden md:flex z-20"
-                onClick={(e) => { e.stopPropagation(); handlePrev(); }}
-            >
-                &#x2039;
-            </button>
+            <img
+                src={gallery[currentIndex]}
+                alt="Fullscreen"
+                className="max-h-[90vh] max-w-[90vw] object-contain animate-scaleIn"
+                onClick={(e) => e.stopPropagation()}
+            />
 
-            {/* Filmstrip container for swipe animation */}
-            <div
-                className="flex items-center h-full w-full transition-transform duration-300 ease-in-out"
-                style={{ transform: `translateX(-${currentIndex * 100}%)` }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-            >
-                {gallery.map((src, index) => (
-                    <div key={`${src}-${index}`} className="flex-shrink-0 w-full h-full flex items-center justify-center p-4">
-                        <img
-                            src={src}
-                            alt={`Fullscreen view ${index + 1}`}
-                            className="max-w-full max-h-full object-contain pointer-events-none"
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    </div>
-                ))}
-            </div>
-
-            {/* Next Button - hidden on mobile */}
-            <button
-                className="fullscreen-nav-btn right-4 text-4xl hidden md:flex z-20"
-                onClick={(e) => { e.stopPropagation(); handleNext(); }}
-            >
-                &#x203A;
-            </button>
-
-            {/* Image Indicator */}
-            <div className="absolute bottom-4 text-white text-sm font-mono bg-black/50 px-3 py-1 rounded-full z-20">
+            <button className="absolute right-4 text-white text-5xl hidden md:block z-20 hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); handleNext(); }}>&#x203A;</button>
+            <div className="absolute bottom-8 text-white bg-black/50 px-4 py-1 rounded-full text-sm backdrop-blur-sm">
                 {currentIndex + 1} / {gallery.length}
             </div>
         </div>
@@ -113,40 +198,39 @@ export const FullscreenViewer = ({ gallery, startIndex, onClose }) => {
 
 // ---------- GalleryScroller ----------
 const GalleryScroller = ({ images, title, onImageClick }) => {
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const safeImages = images && Array.isArray(images) && images.length > 0 ? images : [getFirstImage(null)];
+    const safeImages = images && Array.isArray(images) && images.length > 0
+        ? images
+        : ['https://placehold.co/600x400/1f2937/FFFFFF?text=No+Image'];
 
-    useEffect(() => {
-        setCurrentImageIndex(0);
-    }, [images]);
+    const [idx, setIdx] = useState(0);
 
-    const showNextImage = () => setCurrentImageIndex(p => (p + 1) % safeImages.length);
-    const showPrevImage = () => setCurrentImageIndex(p => (p - 1 + safeImages.length) % safeImages.length);
+    const next = (e) => { e.stopPropagation(); setIdx((prev) => (prev + 1) % safeImages.length); };
+    const prev = (e) => { e.stopPropagation(); setIdx((prev) => (prev - 1 + safeImages.length) % safeImages.length); };
 
     return (
-        <div className="modal-gallery-container">
-            <div
-                className="modal-gallery-filmstrip"
-                style={{ transform: `translateX(-${currentImageIndex * 100}%)` }}
-            >
-                {safeImages.map((img, index) =>
-                    <div className="modal-gallery-slide" key={`${img}-${index}`}>
-                        <img
-                            src={img}
-                            alt={`${title || 'Gallery'} image ${index + 1}`}
-                            className="modal-gallery-image"
-                            onClick={() => onImageClick(img, safeImages, index)}
-                        />
-                    </div>
-                )}
-            </div>
-
+        <div className="relative w-full h-64 bg-gray-900 rounded-lg overflow-hidden mb-6 group shrink-0">
+            <img
+                src={safeImages[idx]}
+                alt={`${title} - view ${idx + 1}`}
+                className="w-full h-full object-cover cursor-pointer transition-transform duration-500 hover:scale-105"
+                onClick={() => onImageClick(safeImages[idx], safeImages, idx)}
+            />
             {safeImages.length > 1 && (
                 <>
-                    <button onClick={showPrevImage} className="modal-gallery-nav modal-gallery-prev">‹</button>
-                    <button onClick={showNextImage} className="modal-gallery-nav modal-gallery-next">›</button>
-                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs font-mono px-2 py-1 rounded-full">
-                        {currentImageIndex + 1} / {safeImages.length}
+                    <button
+                        onClick={prev}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                        &#8249;
+                    </button>
+                    <button
+                        onClick={next}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                        &#8250;
+                    </button>
+                    <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+                        {idx + 1} / {safeImages.length}
                     </div>
                 </>
             )}
@@ -154,422 +238,306 @@ const GalleryScroller = ({ images, title, onImageClick }) => {
     );
 };
 
-// ---------- Icon ----------
-const Icon = ({ name }) => {
+// ---------- Shared Icon Component ----------
+const Icon = ({ name, className = "" }) => {
+    if (!name) return null;
+    const key = name.toLowerCase();
+
     const icons = {
         github: (
-            <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-                <path
-                    fillRule="evenodd"
-                    d="M12 2C6.477 2 2 6.477 2 12c0 4.418 
-             2.865 8.165 6.839 9.489.5.092.682-.218.682-.482 
-             0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.343
-             -3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908
-             -.62.069-.608.069-.608 1.003.07 1.531 1.032 
-             1.531 1.032.892 1.53 2.341 1.088 2.91.832.092
-             -.647.35-1.088.636-1.338-2.22-.253-4.555-1.113
-             -4.555-4.951 0-1.093.39-1.988 1.031-2.688-.103
-             -.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 
-             1.026A9.564 9.564 0 0112 6.844c.85.004 
-             1.705.115 2.504.337 1.909-1.296 2.747-1.027 
-             2.747-1.027.546 1.379.203 2.398.1 
-             2.651.64.7 1.03 1.595 1.03 2.688 0 
-             3.848-2.338 4.695-4.566 4.942.359.309.678.92.678 
-             1.855 0 1.338-.012 2.419-.012 2.747 
-             0 .268.18.58.688.482A10.001 10.001 0 
-             0022 12c0-5.523-4.477-10-10-10z"
-                    clipRule="evenodd"
-                />
+            <svg fill="currentColor" viewBox="0 0 24 24" className={className || "w-full h-full"} height="1em" width="1em">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-1.455-3.795-1.455-.54-1.38-1.335-1.755-1.335-1.755-1.095-.75.09-.735.09-.735 1.2.09 1.83 1.23 1.83 1.23 1.08 1.83 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.285 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
             </svg>
         ),
-
         linkedin: (
-            <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M19 0h-14c-2.761 0-5 2.239-5 
-                5v14c0 2.761 2.239 5 5 5h14c2.762 
-                0 5-2.239 5-5v-14c0-2.761-2.238
-                -5-5-5zm-11 19h-3v-11h3v11zm-1.5
-                -12.268c-.966 0-1.75-.79-1.75
-                -1.764s.784-1.764 1.75-1.764 
-                1.75.79 1.75 1.764-.783 
-                1.764-1.75 1.764zm13.5 
-                12.268h-3v-5.604c0-3.368-4
-                -3.113-4 0v5.604h-3v-11h3v1.765
-                c1.396-2.586 7-2.777 7 
-                2.476v6.759z" />
+            <svg fill="currentColor" viewBox="0 0 24 24" className={className || "w-full h-full"} height="1em" width="1em">
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
             </svg>
         ),
-
-        twitter: (
-            <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M23 3a10.9 10.9 0 01-3.14 
-                 1.53A4.48 4.48 0 0022.4.36a9 
-                 9 0 01-2.84 1.08 4.52 4.52 0 
-                 00-7.71 4.13A12.9 12.9 0 
-                 013 2.1a4.52 4.52 0 001.4 
-                 6.04A4.48 4.48 0 012.8 
-                 7.7v.05a4.51 4.51 0 
-                 003.63 4.43 4.52 4.52 0 
-                 01-2.03.08 4.52 4.52 0 
-                 004.22 3.14A9.05 9.05 0 
-                 012 19.54a12.8 12.8 0 
-                 006.95 2.04c8.34 
-                 0 12.9-6.92 12.9-12.93 
-                 0-.2 0-.42-.02-.63A9.18 
-                 9.18 0 0023 3z" />
-            </svg>
-        ),
-
         instagram: (
-            <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M7 2C4.243 2 2 4.243 2 
-                 7v10c0 2.757 2.243 5 5 
-                 5h10c2.757 0 5-2.243 5-5V7c0
-                 -2.757-2.243-5-5-5H7zm10 
-                 2c1.654 0 3 1.346 3 
-                 3v10c0 1.654-1.346 3-3 
-                 3H7c-1.654 0-3-1.346-3
-                 -3V7c0-1.654 1.346-3 
-                 3-3h10zm-5 3a5 
-                 5 0 100 10 5 5 0 
-                 000-10zm0 2a3 
-                 3 0 110 6 3 3 0 
-                 010-6zm4.5-2a1.5 
-                 1.5 0 100 3 1.5 1.5 0 
-                 000-3z" />
+            <svg fill="currentColor" viewBox="0 0 24 24" className={className || "w-full h-full"} height="1em" width="1em">
+                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
             </svg>
         ),
-        users: (<svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>),
-        target: (<svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>),
-        award: (<svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 11l3-3m0 0l3 3m-3-3v8m0-13a9 9 0 110 18 9 9 0 010-18z"></path></svg>),
-        globe: (<svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2h10a2 2 0 002-2v-1a2 2 0 012-2h1.945M7.707 4.293a1 1 0 010 1.414L5.414 8l2.293 2.293a1 1 0 11-1.414 1.414L4 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L2.586 8 1.293 6.707a1 1 0 011.414-1.414L5 6.586l2.293-2.293a1 1 0 011.414 0z"></path></svg>),
+        users: <span className="text-4xl">👥</span>,
+        target: <span className="text-4xl">🎯</span>,
+        award: <span className="text-4xl">🏆</span>,
+        globe: <span className="text-4xl">🌍</span>
     };
 
-    return icons[name] || null;
+    return icons[key] || <span className="text-xl">🔹</span>;
 };
 
-// ---------- Scroller ----------
-const Scroller = ({ children }) => {
-    const scrollerRef = useRef(null);
-    const intervalRef = useRef(null);
-    const [totalItems, setTotalItems] = useState(0);
-    const [currentIndex, setCurrentIndex] = useState(0);
+// ---------- Scroller Utility (Updated for centering) ----------
+const Scroller = ({ children, autoScroll = false }) => {
+    const scrollRef = useRef(null);
+    const [isPaused, setIsPaused] = useState(false);
 
-    useEffect(() => {
-        const scroller = scrollerRef.current;
-        if (!scroller) return;
+    const scroll = (direction) => {
+        if (scrollRef.current) {
+            const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+            const scrollAmount = 300;
 
-        // Count the number of direct children
-        const items = scroller.children;
-        setTotalItems(items.length);
-    }, [children]);
-
-    const scrollToItem = (index) => {
-        const scroller = scrollerRef.current;
-        if (scroller && scroller.children[index]) {
-            const item = scroller.children[index];
-            // On mobile, scroll to show the item from the left edge
-            // On desktop, center the item
-            const isMobile = window.innerWidth <= 768;
-
-            if (isMobile) {
-                // For mobile: scroll so the item starts from the left with some padding
-                const scrollPosition = item.offsetLeft - 20; // 20px padding from left
-                scroller.scrollTo({
-                    left: Math.max(0, scrollPosition), // Don't scroll before 0
-                    behavior: 'smooth'
-                });
+            if (direction === 1 && scrollLeft + clientWidth >= scrollWidth - 10) {
+                scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
             } else {
-                // For desktop: center the item
-                const scrollPosition = item.offsetLeft - (scroller.offsetWidth - item.offsetWidth) / 2;
-                scroller.scrollTo({
-                    left: scrollPosition,
-                    behavior: 'smooth'
-                });
+                scrollRef.current.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
             }
         }
     };
 
-    const startAutoScroll = () => {
-        clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(() => {
-            setCurrentIndex(prevIndex => (prevIndex + 1) % totalItems);
-        }, 1000);
-    };
-
-    const stopAutoScroll = () => {
-        clearInterval(intervalRef.current);
-    };
-
-    // Effect to handle the actual scrolling when currentIndex changes
     useEffect(() => {
-        if (totalItems > 0) {
-            scrollToItem(currentIndex);
-        }
-    }, [currentIndex, totalItems]);
-
-    // Effect to manage the auto-scroll timer
-    useEffect(() => {
-        if (totalItems > 0) {
-            startAutoScroll();
-        }
-        return () => stopAutoScroll(); // Cleanup on unmount
-    }, [totalItems]);
-
-    const handlePrevClick = () => {
-        const newIndex = (currentIndex - 1 + totalItems) % totalItems;
-        setCurrentIndex(newIndex);
-        stopAutoScroll(); // Stop auto-play when user interacts
-    };
-
-    const handleNextClick = () => {
-        const newIndex = (currentIndex + 1) % totalItems;
-        setCurrentIndex(newIndex);
-        stopAutoScroll(); // Stop auto-play when user interacts
-    };
+        if (!autoScroll || isPaused) return;
+        const interval = setInterval(() => scroll(1), 3000);
+        return () => clearInterval(interval);
+    }, [autoScroll, isPaused]);
 
     return (
         <div
-            className="scroll-section-container relative"
-            onMouseEnter={stopAutoScroll}
-            onMouseLeave={startAutoScroll}
+            className="scroll-section-container group"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
         >
-            <button onClick={handlePrevClick} className="scroll-nav-btn left-0">&lt;</button>
-            <div className="scroll-wrapper" ref={scrollerRef}>
+            <button onClick={() => scroll(-1)} className="scroll-nav-btn left-0 opacity-0 group-hover:opacity-100 transition-opacity md:opacity-100" aria-label="Scroll Left">&lt;</button>
+            <div className="scroll-wrapper" ref={scrollRef}>
                 {children}
             </div>
-            <button onClick={handleNextClick} className="scroll-nav-btn right-0">&gt;</button>
-            {totalItems > 0 && (
-                <div className="scroll-indicator">
-                    {currentIndex + 1} / {totalItems}
-                </div>
-            )}
+            <button onClick={() => scroll(1)} className="scroll-nav-btn right-0 opacity-0 group-hover:opacity-100 transition-opacity md:opacity-100" aria-label="Scroll Right">&gt;</button>
         </div>
     );
 };
-// ---------- Component: LoadingScreen ----------
-export const LoadingScreen = ({ isLoading }) => {
-    const screenClasses = `
-    fixed inset-0 bg-gray-900 flex items-center justify-center z-50
-    transition-opacity duration-500 ease-in-out
-    ${isLoading ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-  `;
 
-    return (
-        <div id="loading-screen" className={screenClasses}>
-            <div className="text-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary mx-auto mb-4" />
-                <h2 className="text-xl font-semibold">Loading IUCEE Experience...</h2>
-            </div>
+// ---------- Component: LoadingScreen ----------
+export const LoadingScreen = ({ isLoading }) => (
+    <div id="loading-screen" className={`fixed inset-0 flex items-center justify-center z-50 transition-opacity duration-500 ${isLoading ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[var(--primary-color)] mx-auto mb-4" />
+            <h2 className="text-xl font-bold">Loading Experience...</h2>
         </div>
-    );
-};
+    </div>
+);
 
 // ---------- Component: Navbar ----------
 export const Navbar = ({ isScrolled }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const navLinks = [
         { href: '#hero', title: 'Join' },
-        { href: '#vision', title: 'Vision' },
-        { href: '#achievements', title: 'Achievements' },
-        { href: '#sdg', title: 'UN SDGs' },
         { href: '#projects', title: 'Projects' },
         { href: '#events', title: 'Events' },
-        { href: '#timeline', title: 'Timeline' },
+        { href: '#sdg', title: 'SDGs' },
         { href: '#team', title: 'Team' },
-        { href: '#alumni', title: 'Alumni' },
-        { href: '#partners', title: 'Partners' },
-        { href: '#gallery', title: 'Gallery' },
     ];
 
-    const closeMenu = () => setIsMenuOpen(false);
     return (
         <>
-            <nav className={`fixed top-0 w-full z-40 transition-all duration-300 ${isScrolled ? 'scrolled' : ''} bg-gray-900/90 backdrop-blur-md`}>
+            <nav id="navbar" className={`fixed top-0 w-full z-40 ${isScrolled ? 'scrolled' : ''}`}>
                 <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                        <a href="https://ritindia.edu/ritwebsite/website/">
-                            <img src="/logos/rit.jpg" alt="RIT Logo" className="h-10 w-20" />
-                        </a>
-                        <a href="https://iucee.org/">
-                            <img src="/logos/iucee.jpg" alt="IUCEE Logo" className="h-10 w-20" />
-                        </a>
-                        <h1 className="text-2xl font-bold text-primary">IUCEE-RIT</h1>
+                    {/* Logo Section */}
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-2xl font-bold text-[var(--primary-color)] tracking-tight whitespace-nowrap">
+                            IUCEE-RIT
+                        </h1>
+                        <div className="hidden sm:flex items-center gap-3 border-l border-gray-400 pl-4 h-8">
+
+                            <img
+                                src="/logos/iucee.jpg"
+                                alt="Logo 1"
+                                className="h-full w-auto object-contain"
+                            />
+                            <img
+                                src="/logos/rit.jpg"
+                                alt="Logo 2"
+                                className="h-full w-auto object-contain"
+                            />
+                        </div>
                     </div>
+
+                    {/* Desktop Menu */}
                     <div className="hidden md:flex items-center space-x-8">
                         {navLinks.map(link => (
-                            <a key={link.href} href={link.href} className="text-white hover:text-primary transition-colors">{link.title}</a>
+                            <a key={link.href} href={link.href} className="nav-link">{link.title}</a>
                         ))}
+                        <div className="border-l border-gray-500 h-6 mx-2"></div>
+                        <ThemeToggle />
                     </div>
-                    <button className="md:hidden text-white" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-4 6h16" /></svg>
-                    </button>
+
+                    {/* Mobile Menu Button */}
+                    <div className="md:hidden flex items-center gap-4">
+                        <ThemeToggle />
+                        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-[var(--text-primary)] text-2xl">
+                            ☰
+                        </button>
+                    </div>
                 </div>
             </nav>
-            {/* Mobile Menu Overlay */}
-            <div className={`fixed inset-0 bg-gray-900/95 backdrop-blur-md z-30 transition-opacity duration-300 ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                <div className="flex flex-col items-center justify-center h-full space-y-8">
+            {isMenuOpen && (
+                <div className="fixed inset-0 bg-[var(--bg-primary)] z-50 flex flex-col items-center justify-center space-y-8 animate-fadeInUp">
+                    <button onClick={() => setIsMenuOpen(false)} className="absolute top-6 right-6 text-3xl text-[var(--text-primary)]">&times;</button>
                     {navLinks.map(link => (
-                        <a key={link.href} href={link.href} onClick={closeMenu} className="text-2xl hover:text-primary transition-colors">{link.title}</a>
+                        <a key={link.href} href={link.href} onClick={() => setIsMenuOpen(false)} className="text-2xl font-bold text-[var(--text-primary)] hover:text-[var(--primary-color)]">{link.title}</a>
                     ))}
+                    <div className="flex items-center gap-4 mt-8 opacity-80">
+                        <img src="/logos/iucee.jpg" alt="Logo 1" className="h-10 w-auto" />
+                        <img src="/logos/rit.jpg" alt="Logo 2" className="h-10 w-auto" />
+                    </div>
                 </div>
-            </div>
+            )}
         </>
     );
 };
 
 // ---------- Component: HeroSection ----------
 export const HeroSection = ({ onJoinClick, isEnrollmentOpen }) => (
-    <section className="min-h-screen flex items-center justify-center text-center relative overflow-hidden" id="hero">
-        <div className="container mx-auto px-6 relative z-10 hero-content">
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                IUCEE-RIT
+    <section className="min-h-screen flex items-center justify-center text-center relative pt-20" id="hero">
+        <div className="container mx-auto px-6 relative z-10">
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 text-gradient animate-fadeInUp" style={{ animationDelay: '0.1s' }}>
+                IUCEE RIT <br />  Student Chapter
             </h1>
-            <p className="text-xl md:text-2xl mb-8 text-gray-300 max-w-3xl mx-auto">
-                Fostering Innovation and Excellence in Engineering Education
+            <p className="text-xl md:text-2xl mb-8 text-[var(--text-secondary)] max-w-3xl mx-auto animate-fadeInUp" style={{ animationDelay: '0.2s' }}>
+                Providing a platform for engineering students to showcase and enhance their skills and making them Global Leaders.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <a href="#projects" className="btn-primary px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105">
-                    Explore Projects
-                </a>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fadeInUp" style={{ animationDelay: '0.3s' }}>
+                <a href="#projects" className="btn-primary px-8 py-4">View Projects</a>
                 <button
                     onClick={onJoinClick}
                     disabled={!isEnrollmentOpen}
-                    className="btn-secondary px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 disabled:bg-gray-600 disabled:border-gray-600 disabled:text-gray-400 disabled:cursor-not-allowed disabled:transform-none"
+                    className="btn-secondary px-8 py-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isEnrollmentOpen === null
-                        ? 'Loading...'
-                        : isEnrollmentOpen
-                            ? 'Join Our Mission'
-                            : 'Applications Closed'}
+                    {isEnrollmentOpen === null ? 'Checking...' : isEnrollmentOpen ? 'Join Chapter' : 'Applications Closed'}
                 </button>
             </div>
         </div>
-        <div className="absolute inset-0 pointer-events-none">
-            <div className="floating-element absolute top-20 left-10 w-4 h-4 bg-primary rounded-full opacity-60"></div>
-            <div className="floating-element absolute top-40 right-20 w-6 h-6 bg-accent rounded-full opacity-40"></div>
-            <div className="floating-element absolute bottom-32 left-1/4 w-3 h-3 bg-primary rounded-full opacity-50"></div>
+    </section>
+);
+
+// ---------- Component: VisionSection ----------
+export const VisionSection = () => (
+    <section className="py-20 bg-[var(--bg-secondary)]" id="vision">
+        <div className="container mx-auto px-6 text-center">
+            <h2 className="text-3xl font-bold mb-12 text-[var(--text-primary)]">Our Core Pillars</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {[
+                    { t: 'Innovation', d: 'Aspire every engineering student to enhance skills and inspire to be creative and innovative.' },
+                    { t: 'Sustainability', d: 'Focused on long-term impact aligned with SDGs.' },
+                    { t: 'Community', d: 'Able to recognize problems in the society and solve them willingly.' }
+                ].map((item, i) => (
+                    <div key={i} className="section-card">
+                        <h3 className="text-2xl font-bold text-[var(--primary-color)] mb-3">{item.t}</h3>
+                        <p className="text-[var(--text-secondary)]">{item.d}</p>
+                    </div>
+                ))}
+            </div>
         </div>
     </section>
 );
-// ---------- Component: VisionSection ----------
-export const VisionSection = () => {
-    return (
-        <section className="py-20" id="vision" >
-            <div className="container mx-auto px-6 text-center">
-                <h2 className="text-4xl font-bold mb-6 text-primary">Our Vision</h2>
-                <p className="max-w-3xl mx-auto text-lg text-gray-300 mb-12">
-                    To cultivate an environment of engineering excellence, empowering students to tackle real-world challenges through hands-on projects, industry collaboration, and a focus on sustainable development.
-                </p>
-                <div className="grid md:grid-cols-3 gap-8">
-                    <div className="vision-card  bg-gray-800/50 p-6 rounded-lg">
-                        <h3 className="text-2xl font-bold text-accent mb-3">Innovation</h3>
-                        <p className="text-gray-400">Driving progress through creative solutions and cutting-edge technology.</p>
-                    </div>
-                    <div className="vision-card  bg-gray-800/50 p-6 rounded-lg" style={{ animationDelay: '0.2s' }}>
-                        <h3 className="text-2xl font-bold text-accent mb-3">Collaboration</h3>
-                        <p className="text-gray-400">Building strong partnerships between students, faculty, and industry leaders.</p>
-                    </div>
-                    <div className="vision-card  bg-gray-800/50 p-6 rounded-lg" style={{ animationDelay: '0.4s' }}>
-                        <h3 className="text-2xl font-bold text-accent mb-3">Excellence</h3>
-                        <p className="text-gray-400">Upholding the highest standards in education, research, and project execution.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-};
 
-// ---------- Component: TimelineSection ----------
-export const TimelineSection = ({ timelineEvents }) => {
-
-    const TimelineItem = ({ event, index }) => {
-        const isLeft = index % 2 === 0;
-        return (
-            <div className="timeline-item relative" style={{ animationDelay: `${index * 0.15}s` }}>
-                <div className={`flex items-center ${isLeft ? 'md:flex-row' : 'md:flex-row-reverse'}`}>
-                    <div className="timeline-content bg-gray-800/50 backdrop-blur-md p-6 rounded-lg border border-gray-700 w-full md:w-5/12">
-                        <span className="text-sm font-semibold text-primary">{event.year}</span>
-                        <h3 className="text-xl font-bold text-white mt-1 mb-2">{event.title}</h3>
-                        <p className="text-gray-400">{event.description}</p>
-                    </div>
-                    <div className="timeline-dot-container flex justify-center w-full md:w-2/12">
-                        <div className="timeline-dot w-4 h-4 bg-primary rounded-full border-4 border-gray-900 relative z-10"></div>
-                    </div>
-                    <div className="hidden md:block md:w-5/12"></div>
-                </div>
+// ---------- Component: SdgSection ----------
+export const SdgSection = ({ sdgs }) => (
+    <section className="py-20" id="sdg">
+        <div className="container mx-auto px-6">
+            <div className="text-center mb-12">
+                <h2 className="text-3xl font-bold text-[var(--text-primary)]">Sustainable Development Goals</h2>
+                <p className="text-[var(--text-muted)] mt-2">We align every project with these global objectives.</p>
             </div>
-        );
-    };
-
-    return (
-        <section className="py-20 relative" id="timeline" >
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 text-primary">Our Journey</h2>
-                <div className="relative">
-                    <div className="timeline-line absolute left-1/2 top-0 w-1 bg-gradient-to-b from-primary to-accent h-full transform -translate-x-1/2 hidden md:block"></div>
-                    {timelineEvents && timelineEvents.map((event, index) =>
-                        <TimelineItem key={index} event={event} index={index} />
-                    )}
-                </div>
-            </div>
-        </section>
-    );
-};
+            <Scroller autoScroll={true}>
+                {sdgs && sdgs.map(goal => {
+                    const colorVar = `var(--sdg-${goal.id})`;
+                    return (
+                        <div
+                            key={goal.id}
+                            className="sdg-card cursor-pointer"
+                            style={{ borderTop: `6px solid ${colorVar}` }}
+                            onClick={() => window.open(`https://sdgs.un.org/goals/goal${goal.id}`, "_blank")}
+                        >
+                            <div className="text-4xl mb-4 text-center">{goal.icon}</div>
+                            <h3 className="font-bold text-[var(--text-primary)]" style={{ color: colorVar }}>
+                                {goal.id}. {goal.title}
+                            </h3>
+                            <p className="text-sm text-[var(--text-secondary)] mt-2">{goal.description}</p>
+                        </div>
+                    );
+                })}
+            </Scroller>
+        </div>
+    </section>
+);
 
 // ---------- Component: ProjectsSection ----------
-export const ProjectsSection = ({ projects, onShowDetails }) => {
-    return (
-        <section className="py-20" id="projects" >
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl font-bold text-center mb-12 text-primary">Featured Projects</h2>
-                <Scroller>
-                    {projects && projects.map(project => (
-                        <div key={project.id} className="project-card" onClick={() => onShowDetails('project', project)}>
-                            <img src={getFirstImage(project?.images)}
-                                alt={project?.title || 'Project'}
-                                loading="lazy" />
-                            <div className="p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="badge-3d">{safeGet(project, 'category', 'Project')}</span>
-                                    <span className="text-sm text-gray-400">{safeGet(project, 'year', 'Year TBA')}</span>
-                                </div>
-                                <h3 className="text-xl font-bold mb-2 text-white">{safeGet(project, 'title', 'Untitled Project')}</h3>
-                                <p className="text-gray-300 mb-4 line-clamp-2">{safeGet(project, 'description')}</p>
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    {(project?.technologies && Array.isArray(project.technologies) ? project.technologies : ['Tech stack not specified']).map((tech, idx) =>
-                                        <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded">{tech}</span>
-                                    )}
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm text-primary font-semibold">{safeGet(project, 'status', 'Status unknown')}</span>
-                                    <div className="text-primary font-semibold hover:underline">
-                                        View Details →
-                                    </div>
-                                </div>
-                            </div>
+export const ProjectsSection = ({ projects, onShowDetails }) => (
+    <section className="py-20 bg-[var(--bg-secondary)]" id="projects">
+        <div className="container mx-auto px-6">
+            <h2 className="text-3xl font-bold text-center mb-12 text-[var(--text-primary)]">Projects</h2>
+            <Scroller>
+                {projects && projects.map(project => (
+                    <div key={project.id} className="project-card cursor-pointer" onClick={() => onShowDetails('project', project)}>
+                        <img src={getFirstImage(project?.images)} alt={project?.title} loading="lazy" />
+                        <div className="badge-3d mb-2">{safeGet(project, 'category', 'General')}</div>
+                        <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">{safeGet(project, 'title')}</h3>
+                        <p className="text-[var(--text-muted)] line-clamp-2 text-sm">{safeGet(project, 'description')}</p>
+                    </div>
+                ))}
+            </Scroller>
+        </div>
+    </section>
+);
+
+// ---------- Component: TimelineSection ----------
+export const TimelineSection = ({ timelineEvents }) => (
+    <section className="py-20" id="timeline">
+        <div className="container mx-auto px-6">
+            <h2 className="text-3xl font-bold text-center mb-16 text-[var(--text-primary)]">Our Journey</h2>
+            <div className="relative max-w-4xl mx-auto">
+                <div className="timeline-line absolute left-4 md:left-1/2 top-0 bottom-0 w-1 transform md:-translate-x-1/2"></div>
+                {timelineEvents && timelineEvents.map((event, index) => (
+                    <div key={index} className={`relative flex items-center justify-between mb-8 ${index % 2 === 0 ? 'md:flex-row-reverse' : 'md:flex-row'}`}>
+                        <div className="hidden md:block w-5/12"></div>
+                        <div className="absolute left-4 md:left-1/2 transform -translate-x-1/2 timeline-dot w-4 h-4 rounded-full z-10"></div>
+                        <div className="ml-12 md:ml-0 w-full md:w-5/12 timeline-content p-6 rounded-lg">
+                            <span className="text-[var(--primary-color)] font-bold">{event.year}</span>
+                            <h3 className="text-lg font-bold text-[var(--text-primary)]">{event.title}</h3>
+                            <p className="text-sm text-[var(--text-secondary)]">{event.description}</p>
                         </div>
-                    ))}
-                </Scroller>
+                    </div>
+                ))}
             </div>
-        </section>
-    );
-};
-// ---------- Component: AchievementsSection ----------
-export const AchievementsSection = ({ achievements }) => {
+        </div>
+    </section>
+);
+
+// ---------- Component: EventsSection ----------
+export const EventsSection = ({ events, onShowDetails }) => {
+    const [activeTab, setActiveTab] = useState('upcoming');
+    const displayEvents = activeTab === 'upcoming' ? events.upcoming : events.past;
+
     return (
-        <section className="py-20" id="achievements" >
-            <div className="container mx-auto px-6 text-center">
-                <h2 className="text-4xl font-bold text-center mb-16 text-primary">Our Impact</h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-                    {achievements && achievements.map((ach, index) => (
-                        <a key={index} href={ach.link} className="achievement-card block bg-gray-800/50 p-6 rounded-lg p-6 flex flex-col items-center">
-                            <div className="text-4xl text-primary mb-4"><Icon name={ach.icon} /></div>
-                            <h3 className="text-xl font-bold text-white mb-2">{ach.title}</h3>
-                            <p className="text-gray-400">{ach.description}</p>
-                        </a>
+        <section className="py-20" id="events">
+            <div className="container mx-auto px-6">
+                <h2 className="text-3xl font-bold text-center mb-8 text-[var(--text-primary)]">Events</h2>
+                <div className="flex justify-center gap-4 mb-12">
+                    {['upcoming', 'past'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-6 py-2 rounded-full font-semibold transition-all ${activeTab === tab ? 'bg-[var(--primary-color)] text-white' : 'bg-[var(--bg-card)] text-[var(--text-secondary)] border border-[var(--border-color)]'}`}
+                        >
+                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        </button>
                     ))}
                 </div>
+                <Scroller>
+                    {displayEvents?.length > 0 ? displayEvents.map((e, i) => (
+                        <div key={i} className="event-card cursor-pointer" onClick={() => onShowDetails(`${activeTab}_event`, e)}>
+                            <img src={getFirstImage(e?.images)} alt={e.title} />
+                            <div className="text-sm text-[var(--accent-color)] font-bold mb-1">
+                                {e.date ? new Date(e.date).toDateString() : 'TBA'}
+                            </div>
+                            <h3 className="text-lg font-bold text-[var(--text-primary)] mb-2">{e.title}</h3>
+                            <p className="text-sm text-[var(--text-muted)] line-clamp-2">{e.description}</p>
+                        </div>
+                    )) : (
+                        <p className="text-[var(--text-muted)] w-full text-center py-8">No events found.</p>
+                    )}
+                </Scroller>
             </div>
         </section>
     );
@@ -577,164 +545,192 @@ export const AchievementsSection = ({ achievements }) => {
 
 // ---------- Component: TeamSection ----------
 export const TeamSection = ({ teamMembers, onShowDetails }) => {
+    // Graceful handling if data is missing
+    const safeMembers = teamMembers || [];
+    if (safeMembers.length === 0) return null;
+
+    const mid = Math.ceil(safeMembers.length / 2);
+    const row1 = safeMembers.slice(0, mid);
+    const row2 = safeMembers.slice(mid);
+
+    const renderTeamCard = (m) => (
+        <div className="team-card cursor-pointer group h-full bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-xl text-center hover:border-[var(--primary-color)] transition-colors" onClick={() => onShowDetails('team', m)}>
+            <div className="relative mx-auto mb-3 w-24 h-24">
+                <img
+                    src={m.image || 'https://placehold.co/150x150?text=User'}
+                    alt={m.name}
+                    className="w-full h-full rounded-full object-cover border-4 border-[var(--border-color)] group-hover:border-[var(--primary-color)] transition-colors"
+                />
+            </div>
+            <h3 className="text-lg font-bold text-[var(--text-primary)] truncate">{m.name}</h3>
+            <p className="text-[var(--primary-color)] font-semibold text-xs mb-1 truncate">{m.role}</p>
+            <p className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider truncate">{m.department}</p>
+        </div>
+    );
+
     return (
-        <section className="py-20" id="team">
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl font-bold text-center mb-12 text-primary">Our Team</h2>
-                {/* Use the upgraded Scroller component */}
-                <Scroller>
-                    {teamMembers.map((member) => (
-                        <div key={member?.name || `member-${index}`} className="team-card transform-gpu cursor-pointer" onClick={() => onShowDetails('team', member)}>
-                            <img src={member?.image || 'https://placehold.co/120x120/1f2937/FFFFFF?text=Team'}
-                                alt={member?.name || 'Team Member'}
-                                loading="lazy" />
-                            <h3 className="text-lg font-bold text-white mb-1">{safeGet(member, 'name', 'Team Member')}</h3>
-                            <p className="text-primary font-semibold mb-2">{safeGet(member, 'role', 'Role not specified')}</p>
-                            <p className="text-sm text-gray-400 mb-3">{safeGet(member, 'department', 'Department not specified')}</p>
-                            <p className="text-xs text-gray-300 mb-4 line-clamp-2">{safeGet(member, 'bio')}</p>
-                            <div className="text-xs text-primary mt-2">Click to view details →</div>
-                        </div>
-                    ))}
-                </Scroller>
+        <section className="py-20 bg-[var(--bg-secondary)] overflow-hidden" id="team">
+            <div className="container mx-auto px-6 mb-12">
+                <h2 className="text-3xl font-bold text-center text-[var(--text-primary)]">Team</h2>
+            </div>
+            <MarqueeScroller items={row1.length > 0 ? row1 : safeMembers} direction="left" renderItem={renderTeamCard} speed={0.8} />
+            <div className="mt-6">
+                <MarqueeScroller items={row2.length > 0 ? row2 : safeMembers} direction="right" renderItem={renderTeamCard} speed={0.8} />
             </div>
         </section>
     );
 };
+
 // ---------- Component: AlumniSection ----------
 export const AlumniSection = ({ alumni, onShowDetails }) => {
+    const safeAlumni = alumni || [];
+    if (safeAlumni.length === 0) return null;
+
+    const mid = Math.ceil(safeAlumni.length / 2);
+    const row1 = safeAlumni.slice(0, mid);
+    const row2 = safeAlumni.slice(mid);
+
+    const renderAlumniCard = (a) => (
+        <div className="alumni-card cursor-pointer group h-full bg-[var(--bg-card)] border border-[var(--border-color)] p-6 rounded-xl text-center hover:border-[var(--primary-color)] transition-colors" onClick={() => onShowDetails('alumni', a)}>
+            <div className="relative mx-auto mb-3 w-20 h-20">
+                <img
+                    src={a.image || 'https://placehold.co/150x150?text=Alumni'}
+                    alt={a.name}
+                    className="w-full h-full rounded-full object-cover border-4 border-[var(--border-color)] group-hover:border-[var(--primary-color)] transition-colors"
+                />
+            </div>
+            <h3 className="text-md font-bold text-[var(--text-primary)] truncate">{a.name}</h3>
+            <p className="text-[var(--text-secondary)] text-xs mb-2 truncate">{a.currentRole || a.current_role}</p>
+            <span className="inline-block bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-muted)] text-[10px] px-2 py-1 rounded-full">
+                Class of {a.year}
+            </span>
+        </div>
+    );
+
     return (
-        <section className="py-20" id="alumni">
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl font-bold text-center mb-12 text-primary">Our Alumni</h2>
-                {/* Use the upgraded Scroller component */}
-                <Scroller>
-                    {alumni.map((person) => (
-                        <div key={person.name} className="alumni-card transform-gpu cursor-pointer" onClick={() => onShowDetails('alumni', person)}>
-                            <img src={person.image || 'https://placehold.co/100x100/1f2937/FFFFFF?text=Alumni'} alt={person.name} />
-                            <h3 className="text-lg font-bold text-white mb-1">{person.name}</h3>
-                            <p className="text-sm text-gray-400 mb-4">{person.currentRole}</p>
-                            <div className="text-primary font-semibold hover:underline">
-                                View Details →
-                            </div>
-                        </div>
-                    ))}
-                </Scroller>
+        <section className="py-20 overflow-hidden" id="alumni">
+            <div className="container mx-auto px-6 mb-12">
+                <h2 className="text-3xl font-bold text-center text-[var(--text-primary)]">Alumni</h2>
+            </div>
+            <MarqueeScroller items={row1.length > 0 ? row1 : safeAlumni} direction="left" renderItem={renderAlumniCard} speed={0.8} />
+            <div className="mt-6">
+                <MarqueeScroller items={row2.length > 0 ? row2 : safeAlumni} direction="right" renderItem={renderAlumniCard} speed={0.8} />
             </div>
         </section>
     );
 };
+
+// ---------- Component: AchievementsSection ----------
+export const AchievementsSection = ({ achievements }) => (
+    <section className="py-20" id="achievements">
+        <div className="container mx-auto px-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {achievements.map((a, i) => (
+                    <a key={i} href={a.link} className="section-card flex flex-col items-center text-center hover:bg-[var(--bg-secondary)]">
+                        <span className="text-4xl text-[var(--primary-color)] mb-2"><Icon name={a.icon} /></span>
+                        <h3 className="font-bold text-[var(--text-primary)]">{a.title}</h3>
+                        <p className="text-xs text-[var(--text-muted)]">{a.description}</p>
+                    </a>
+                ))}
+            </div>
+        </div>
+    </section>
+);
 
 // ---------- Component: PartnersSection ----------
 export const PartnersSection = ({ partners }) => {
-    const duplicatedPartners = [...partners, ...partners];
+    if (!partners || partners.length === 0) return null;
+
+    // Use the Refactored Marquee Scroller here as well for consistency
+    const renderPartner = (p) => (
+        <a href={p.websiteUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center px-4">
+            <img src={p.logoUrl} alt={p.name} className="partner-logo" />
+        </a>
+    );
 
     return (
-        <section className="py-20 bg-gray-900/50" id="partners">
-            <div className="container mx-auto px-6 text-center">
-                <h2 className="text-4xl font-bold mb-4 text-primary">Our Partners & Collaborators</h2>
-                <p className="max-w-2xl mx-auto text-gray-400 mb-12">
-                    We are proud to collaborate with leading academic institutions and industry partners to foster engineering excellence.
-                </p>
-                <div className="partner-scroller">
-                    <div className="partner-scroller-inner">
-                        {duplicatedPartners.map((partner, index) => (
-                            <a
-                                key={`${partner.name}-${index}`}
-                                href={partner.websiteUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="partner-logo"
-                                title={partner.name}
-                            >
-                                <img
-                                    src={partner.logoUrl}
-                                    alt={`${partner.name} logo`}
-                                    className="h-12 sm:h-16 md:h-20 object-contain"
-                                />
-                            </a>
-                        ))}
-                    </div>
-                </div>
+        <section className="py-16 bg-[var(--bg-secondary)] border-y border-[var(--border-color)] overflow-hidden">
+            <div className="container mx-auto px-6 text-center mb-8">
+                <p className="text-[var(--text-muted)] uppercase tracking-widest text-sm font-semibold">In Collaboration With</p>
             </div>
+            <MarqueeScroller items={partners} direction="left" renderItem={renderPartner} speed={0.5} />
         </section>
     );
 };
-// ---------- Component: EventsSection ----------
-export const EventsSection = ({ events, onShowDetails }) => {
-    const [activeTab, setActiveTab] = useState('upcoming');
 
-    const UpcomingEventCard = ({ event, index }) => (
-        <div className="event-card transform-gpu cursor-pointer"
-            style={{ animationDelay: `${index * 0.1}s` }}
-            onClick={() => onShowDetails('upcoming_event', event)}>
-            <img src={getFirstImage(event?.images)}
-                alt={event?.title || 'Event'}
-                loading="lazy"
-                className="w-full h-48 object-cover rounded-lg mb-4" />
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <span className="badge-3d">{safeGet(event, 'category', 'Event')}</span>
-                    <span className="text-sm text-accent">{safeGet(event, 'time', 'Time TBA')}</span>
-                </div>
-                <h3 className="text-xl font-bold text-white">{safeGet(event, 'title', 'Untitled Event')}</h3>
-                <p className="text-gray-300 text-sm line-clamp-2">{safeGet(event, 'description')}</p>
-                <div className="space-y-2 text-sm text-gray-400">
-                    <div className="flex items-center">
-                        <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"></path>
-                        </svg>
-                        {event?.date ? new Date(event.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) : 'Date TBA'}
-                    </div>
-                </div>
-                <div className="pt-4 text-primary font-semibold hover:underline">View Details & Register →</div>
-            </div>
-        </div>
-    );
+// ---------- Component: GalleryComponent ----------
+export const GalleryComponent = ({ galleryItems, onGalleryClick }) => {
+    const scrollRef = useRef(null);
+    const [isPaused, setIsPaused] = useState(false);
 
-    const PastEventCard = ({ event, index }) => (
-        <div className="event-card past-event transform-gpu cursor-pointer"
-            style={{ animationDelay: `${index * 0.1}s` }}
-            onClick={() => onShowDetails('past_event', event)}>
-            <img src={getFirstImage(event?.images)}
-                alt={event?.title || 'Event'}
-                loading="lazy"
-                className="w-full h-48 object-cover rounded-lg mb-4" />
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <span className="badge-3d">{safeGet(event, 'category', 'Event')}</span>
-                    <span className="text-sm text-gray-400">
-                        {event?.date ? new Date(event.date).toLocaleDateString("en-US", { year: "numeric", month: "long" }) : 'Date TBA'}
-                    </span>
-                </div>
-                <h3 className="text-xl font-bold text-white">{safeGet(event, 'title', 'Untitled Event')}</h3>
-                <p className="text-gray-300 text-sm">{safeGet(event, 'description')}</p>
-                <div className="pt-2">
-                    <div className="text-xs text-primary font-semibold mb-2">Highlights:</div>
-                    <ul className="text-xs text-gray-400 space-y-1">
-                        {(event?.highlights && Array.isArray(event.highlights) ? event.highlights.slice(0, 2) : ['No highlights available']).map((highlight, idx) =>
-                            <li key={idx}>• {highlight}</li>
-                        )}
-                    </ul>
-                </div>
-            </div>
-        </div>
-    );
+    const scroll = (direction) => {
+        if (scrollRef.current) {
+            const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+            const isMobile = window.innerWidth < 768;
+            const cardWidth = isMobile ? window.innerWidth * 0.85 : window.innerWidth * 0.6;
+            const gap = 32; // 2rem
+            const scrollAmount = cardWidth + gap;
+
+            if (direction === 1 && scrollLeft + clientWidth >= scrollWidth - 10) {
+                scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+            } else {
+                scrollRef.current.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (isPaused) return;
+        const interval = setInterval(() => scroll(1), 4000);
+        return () => clearInterval(interval);
+    }, [isPaused]);
+
+    if (!galleryItems || galleryItems.length === 0) return null;
 
     return (
-        <section className="py-20 relative" id="events" >
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 text-primary">Events</h2>
-                <div className="flex justify-center mb-12">
-                    <div className="bg-gray-800/50 backdrop-blur-md rounded-lg p-2">
-                        <button className={`event-tab-btn px-6 py-3 rounded-md ${activeTab === 'upcoming' ? 'active' : ''}`} onClick={() => setActiveTab('upcoming')}>Upcoming</button>
-                        <button className={`event-tab-btn px-6 py-3 rounded-md ${activeTab === 'past' ? 'active' : ''}`} onClick={() => setActiveTab('past')}>Past</button>
-                    </div>
-                </div>
-                <div className={`event-tab-content ${activeTab === 'upcoming' ? 'block' : 'hidden'}`}>
-                    {events.upcoming?.length > 0 ? <Scroller>{events.upcoming.map((e, i) => <UpcomingEventCard key={i} event={e} index={i} />)}</Scroller> : <p className="text-center text-gray-400">No upcoming events scheduled.</p>}
-                </div>
-                <div className={`event-tab-content ${activeTab === 'past' ? 'block' : 'hidden'}`}>
-                    {events.past?.length > 0 ? <Scroller>{events.past.map((e, i) => <PastEventCard key={i} event={e} index={i} />)}</Scroller> : <p className="text-center text-gray-400">No past events to show.</p>}
+        <section
+            className="py-20 bg-[var(--bg-primary)] overflow-hidden"
+            id="gallery"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+        >
+            <div className="container mx-auto px-6 mb-8">
+                <h2 className="text-3xl font-bold text-center text-[var(--text-primary)]">Gallery</h2>
+            </div>
+            <div className="relative w-full group/slider">
+                <button
+                    className="gallery-nav-btn left-4 opacity-0 group-hover/slider:opacity-100 md:opacity-100"
+                    onClick={() => scroll(-1)}
+                    aria-label="Previous"
+                >
+                    &#8249;
+                </button>
+                <button
+                    className="gallery-nav-btn right-4 opacity-0 group-hover/slider:opacity-100 md:opacity-100"
+                    onClick={() => scroll(1)}
+                    aria-label="Next"
+                >
+                    &#8250;
+                </button>
+                <div className="gallery-slider" ref={scrollRef}>
+                    {galleryItems.map((item, index) => (
+                        <div
+                            key={index}
+                            className="gallery-slide"
+                            onClick={() => onGalleryClick(item)}
+                        >
+                            <img src={item.images[0]} alt={item.title} loading="lazy" />
+                            <div className="gallery-slide-overlay">
+                                <h3 className="text-xl md:text-2xl font-bold text-white mb-2">{item.title}</h3>
+                                <p className="text-gray-200 text-sm md:text-base">{item.description}</p>
+                                {item.totalImages > 1 && (
+                                    <span className="inline-block mt-2 px-2 py-1 bg-black/50 rounded text-xs text-white">
+                                        +{item.totalImages - 1} more photos
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         </section>
@@ -743,275 +739,230 @@ export const EventsSection = ({ events, onShowDetails }) => {
 
 // ---------- Component: Footer ----------
 export const Footer = ({ socialLinks }) => (
-    <footer className="bg-gray-800/50 backdrop-blur-md py-12">
+    <footer className="bg-[var(--bg-primary)] border-t border-[var(--border-color)] py-12 text-center">
         <div className="container mx-auto px-6">
-            <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-primary">Connect With Us</h3>
-                <p className="text-gray-400">Follow our journey and get the latest updates. And if there is an problem :)</p>
-            </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                {socialLinks && socialLinks.map(social => (
-                    <a key={social.name} href={social.url} target="_blank" rel="noopener noreferrer"
-                        className="social-card block bg-gray-800/50 backdrop-blur-md p-6 rounded-lg text-center border border-gray-700 hover:border-primary hover:-translate-y-2 transition-all duration-300">
-                        <div className="mb-4 flex justify-center" style={{ color: social.color }}><Icon name={social.icon} /></div>
-                        <h4 className="text-xl font-bold text-white mb-2">{social.name}</h4>
-                        <p className="text-gray-400 text-sm mb-4">{social.description}</p>
-                        <span className="font-semibold text-primary group-hover:underline">
-                            {social.name === 'LinkedIn' ? 'Connect' : 'Follow'} →
-                        </span>
+            <div className="flex justify-center gap-8 mb-8">
+                {socialLinks && socialLinks.map((s, i) => (
+                    <a
+                        key={i}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-12 h-12 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--primary-color)] hover:text-white transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-1"
+                        aria-label={s.name || 'Social Link'}
+                    >
+                        <Icon name={s.icon} />
                     </a>
                 ))}
             </div>
-            <div className="border-t border-gray-700 pt-8 text-center text-gray-400">
-                <p>&copy; {new Date().getFullYear()} IUCEE-RIT. All rights reserved.</p>
-                <p>Built by the IUCEE-RIT Tech Team.</p>
-            </div>
+            <p className="text-[var(--text-muted)] font-medium">
+                Made with <span className="text-red-500 animate-pulse">♥</span> from Technical Department IUCEE-RIT
+            </p>
         </div>
     </footer>
 );
-// ---------- Component: GalleryComponent ----------
 
-export const GalleryComponent = ({ galleryItems, onImageClick }) => {
-    const sliderRef = useRef(null);
-    const [indicatorText, setIndicatorText] = useState('');
-
-    const scroll = (direction) => {
-        if (sliderRef.current) {
-            const scrollAmount = sliderRef.current.clientWidth * 0.85;
-            sliderRef.current.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
-        }
-    };
-
-    useEffect(() => {
-        const slider = sliderRef.current;
-        if (!slider || !galleryItems || galleryItems.length === 0) return;
-
-        const slides = Array.from(slider.children);
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const index = parseInt(entry.target.dataset.index, 10);
-                    setIndicatorText(`${index + 1} / ${galleryItems.length}`);
-                }
-                entry.target.classList.toggle('is-active', entry.isIntersecting);
-            });
-        }, {
-            root: slider,
-            threshold: 0.6
-        });
-
-        slides.forEach(slide => observer.observe(slide));
-
-        // Initial check
-        if (slides[0]) {
-            setIndicatorText(`1 / ${galleryItems.length}`);
-        }
-
-        return () => slides.forEach(slide => observer.unobserve(slide));
-    }, [galleryItems]);
-
-    return (
-        <section id="gallery" className="py-20">
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl font-bold text-center mb-16 text-primary">Gallery</h2>
-                <div className="relative">
-                    <button onClick={() => scroll(-1)} className="gallery-nav left-0 hidden md:flex">&lt;</button>
-                    <div ref={sliderRef} className="gallery-slider">
-                        {galleryItems && galleryItems.map((item, index) => (
-                            <div
-                                key={index}
-                                className="gallery-slide group"
-                                data-index={index}
-                                onClick={() => onImageClick(item.images[0], item.images, 0)}
-                            >
-                                <img src={item.images[0]} alt={item.title} className="w-full h-full object-cover" />
-                                <div className="gallery-slide-overlay">
-                                    <h3 className="text-xl font-bold">{item.title}</h3>
-                                    <p className="text-sm">{item.description}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <button onClick={() => scroll(1)} className="gallery-nav right-0 hidden md:flex">&gt;</button>
-                    {indicatorText && <div className="scroll-indicator mt-4 relative bottom-auto">{indicatorText}</div>}
-                </div>
-            </div>
-        </section>
-    );
-};
-// ---------- Component: SdgSection ----------
-export const SdgSection = ({ sdgs }) => {
-    return (
-        <section className="py-20 relative z-10" id="sdg" >
-            <div className="container mx-auto px-6">
-                <h2 className="text-4xl font-bold text-center mb-16 text-primary relative z-20">UN Sustainable Development Goals</h2>
-                <div className="relative z-10">
-                    <Scroller>
-                        {sdgs && sdgs.map(goal => (
-                            <div
-                                key={goal.id}
-                                // CSS class 'sdg-card' is now controlled by the new CSS added above
-                                className="sdg-card cursor-pointer opacity-100 relative z-10 bg-gray-800/50 p-6 rounded-lg border border-gray-700 hover:border-primary transition-colors"
-                                onClick={() => window.open(`https://sdgs.un.org/goals/goal${goal.id}`, "_blank", "noopener,noreferrer")}
-                            >
-                                <div className="text-4xl mb-2">{goal.icon}</div>
-                                <h3 className="font-bold text-white">{goal.id}. {goal.title}</h3>
-                                <p className="text-sm text-gray-400 mt-2">{goal.description}</p>
-                                <div className="text-xs text-primary mt-4">Click to learn more →</div>
-                            </div>
-                        ))}
-                    </Scroller>
-                </div>
-            </div>
-        </section>
-    );
-};
-// =================================================================
-// MODAL COMPONENTS
-// =================================================================
-
-// ---------- Component: ApplicationModal ----------
+// ---------- Application Modal (Connected to DB) ----------
 export const ApplicationModal = ({ isOpen, onClose }) => {
+    // Add state for loading
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     if (!isOpen) return null;
-    const [errorMessage, setErrorMessage] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const submitBtn = e.target.querySelector('button[type="submit"]');
+        setIsSubmitting(true);
 
-        // Clear previous errors and set loading state
-        setErrorMessage('');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
-
+        // Gather form data
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
 
         try {
             const response = await fetch('/api/apply', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify(data),
             });
 
-            const result = await response.json(); // Get the JSON response body
+            const result = await response.json();
 
             if (!response.ok) {
-                // If the server sent an error, display its message
-                setErrorMessage(result.message || 'An unknown server error occurred.');
-            } else {
-                // On success, show alert and close
-                alert("Application submitted successfully! We will contact you soon.");
-                onClose();
+                throw new Error(result.error || 'Submission failed');
             }
 
+            alert("Application Submitted Successfully!");
+            onClose();
         } catch (error) {
-            console.error('Submission Error:', error);
-            setErrorMessage('Failed to connect to the server. Please check your network.');
+            console.error('Submission error:', error);
+            alert(`Error: ${error.message}. Please try again.`);
         } finally {
-            // Reset button state
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Application';
+            setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between p-6 border-b border-gray-700">
-                    <h3 className="text-2xl font-bold text-primary">Join Our Mission</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white"> {/* ... svg ... */} </button>
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
+            <div className="bg-[var(--bg-primary)] p-6 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6 border-b border-[var(--border-color)] pb-4">
+                    <h3 className="text-2xl font-bold text-[var(--text-primary)]">Membership Application</h3>
+                    <button onClick={onClose} className="text-2xl hover:text-[var(--primary-color)]">&times;</button>
                 </div>
-                <div className="p-6 overflow-y-auto max-h-[70vh]">
-                    <form onSubmit={handleSubmit}>
-                        <div className="space-y-4">
-                            <input type="text" name="name" placeholder="Full Name" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                            <input type="email" name="email" placeholder="Email Address" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                            <input type="tel" name="phone" pattern="\d{10}" placeholder="Contact Number (10 digits only)" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                            <input type="text" inputMode="numeric" pattern="\d{7}" name="prn" placeholder="PRN (7 digits only)" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required />
-                            <select name="branch" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required defaultValue="">
-                                <option value="" disabled>Branch of Study</option>
-                                <option value="Computer Engineering">Computer Engineering</option>
-                                <option value="Information Technology">Information Technology</option>
-                                <option value="Mechanical Engineering">Mechanical Engineering</option>
-                                <option value="Electronics & Telecommunication">Electronics & Telecommunication</option>
-                                <option value="Civil Engineering">Civil Engineering</option>
-                                <option value="Electrical Engineering">Electrical Engineering</option>
-                                <option value="Other">Other</option>
-                            </select>
-                            <select name="year" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required defaultValue="">
-                                <option value="" disabled>Year of Study</option>
-                                <option value="1">First Year</option>
-                                <option value="2">Second Year</option>
-                                <option value="3">Third Year</option>
-                                <option value="4">Fourth Year</option>
-                            </select>
-                            <textarea name="motivation" placeholder="Why do you want to join IUCEE-RIT?" rows="3" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none" required></textarea>
-                            <textarea name="experience" placeholder="Any previous experience? (Optional)" rows="2" className="w-full p-3 bg-gray-700 rounded-lg focus:ring-2 focus:ring-primary outline-none"></textarea>
-                            {errorMessage && (<p className="text-red-400 text-sm text-center bg-red-900/50 p-3 rounded-lg">{errorMessage}</p>)}
-                            <button type="submit" className="btn-primary w-full py-3 rounded-lg font-semibold">Submit Application</button>
+
+                <form className="space-y-4" onSubmit={handleSubmit}>
+                    {/* Row 1 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-[var(--text-secondary)]">Full Name</label>
+                            <input required name="name" placeholder="John Doe" className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting} />
                         </div>
-                    </form>
-                </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-[var(--text-secondary)]">Email</label>
+                            <input required type="email" name="email" placeholder="john@example.com" className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting} />
+                        </div>
+                    </div>
+
+                    {/* Row 2 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-[var(--text-secondary)]">Phone Number</label>
+                            <input required type="tel" name="phone" placeholder="+91 98765 43210" className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-[var(--text-secondary)]">PRN</label>
+                            <input required name="prn" placeholder="12345678" className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting} />
+                        </div>
+                    </div>
+
+                    {/* Row 3 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-[var(--text-secondary)]">Branch</label>
+                            <select required name="branch" className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting}>
+                                <option value="">Select Branch</option>
+                                <option value="CS">Computer Science</option>
+                                <option value="IT">Information Technology</option>
+                                <option value="ENTC">E&TC</option>
+                                <option value="MECH">Mechanical</option>
+                                <option value="CIVIL">Civil</option>
+                                <option value="AIDS">AI & DS</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-[var(--text-secondary)]">Year of Study</label>
+                            <select required name="year" className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting}>
+                                <option value="">Select Year</option>
+                                <option value="FE">First Year</option>
+                                <option value="SE">Second Year</option>
+                                <option value="TE">Third Year</option>
+                                <option value="BE">Final Year</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Text Areas */}
+                    <div className="space-y-1">
+                        <label className="text-sm font-semibold text-[var(--text-secondary)]">Why do you want to join?</label>
+                        <textarea required name="motivation" rows="3" placeholder="Explain your motivation..." className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting}></textarea>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-sm font-semibold text-[var(--text-secondary)]">Prior Experience (if any)</label>
+                        <textarea name="experience" rows="3" placeholder="Technical skills, past projects, etc." className="input-3d w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] p-2 rounded border border-[var(--border-color)]" disabled={isSubmitting}></textarea>
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className={`btn-primary w-full py-3 mt-4 text-lg flex justify-center items-center ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Submitting...
+                            </>
+                        ) : 'Submit Application'}
+                    </button>
+                </form>
             </div>
         </div>
-    );
+    )
 };
 
-// ---------- Component: DetailsModal ----------
+// ---------- Details Modal ----------
 export const DetailsModal = ({ isOpen, onClose, type, data, onImageClick }) => {
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    useEffect(() => { setCurrentImageIndex(0); }, [data]);
-
     if (!isOpen || !data) return null;
+    const get = (key, fallback) => data[key] || fallback;
 
     const renderContent = () => {
         switch (type) {
             case 'project':
-                const project = data;
                 return (
-                    <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-4">
+                        {/* 1. Main Slider */}
                         <GalleryScroller
-                            images={project?.images}
-                            title={project?.title}
+                            images={data.images}
+                            title={data.title}
                             onImageClick={onImageClick}
                         />
-                        <div className="flex flex-col md:flex-row gap-6">
-                            <div className="flex-1">
-                                <p className="text-gray-300 mb-6">{safeGet(project, 'description')}</p>
-                                <h4 className="font-bold text-primary mb-2">Project Team:</h4>
-                                <ul className="list-disc list-inside text-gray-400">
-                                    {(project?.teamMembers && Array.isArray(project.teamMembers) ? project.teamMembers : ['Team information not available']).map((member, idx) =>
-                                        <li key={idx}>{member}</li>
-                                    )}
-                                </ul>
+
+                        {/* 2. Thumbnail Strip */}
+                        {data.images && data.images.length > 1 && (
+                            <div className="flex gap-2 overflow-x-auto pb-2">
+                                {data.images.map((img, idx) => (
+                                    <img
+                                        key={idx}
+                                        src={img}
+                                        alt={`Thumbnail ${idx}`}
+                                        className="w-20 h-16 object-cover rounded cursor-pointer border-2 border-transparent hover:border-[var(--primary-color)] transition-all"
+                                        onClick={() => onImageClick(img, data.images, idx)}
+                                    />
+                                ))}
                             </div>
-                            <div className="md:w-1/3 space-y-4">
-                                <div className="bg-gray-900/50 p-4 rounded-lg">
-                                    <h4 className="font-bold text-primary mb-2">Details</h4>
-                                    <div className="text-sm space-y-1">
-                                        <p><strong>Year:</strong> {safeGet(project, 'year', 'Not specified')}</p>
-                                        <p><strong>Status:</strong> <span className="font-semibold text-accent">{safeGet(project, 'status', 'Unknown')}</span></p>
-                                        <p><strong>Category:</strong> {safeGet(project, 'category', 'Not specified')}</p>
-                                    </div>
+                        )}
+
+                        <div className="grid md:grid-cols-3 gap-6">
+                            <div className="md:col-span-2 space-y-4">
+                                <h4 className="font-bold text-[var(--primary-color)]">Description</h4>
+                                <p className="text-[var(--text-secondary)]">{get('description')}</p>
+
+                                {/* Team/Contributors */}
+                                {data.teamMembers && data.teamMembers.length > 0 && (
+                                    <>
+                                        <h4 className="font-bold text-[var(--primary-color)] mt-4">Contributors</h4>
+                                        <ul className="list-disc list-inside text-[var(--text-secondary)]">
+                                            {data.teamMembers.map((m, i) => <li key={i}>{m}</li>)}
+                                        </ul>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Sidebar */}
+                            <div className="space-y-4">
+                                <div className="bg-[var(--bg-secondary)] p-4 rounded-lg border border-[var(--border-color)]">
+                                    <div className="mb-2"><span className="font-bold">Year:</span> {get('project_year') || get('year') || 'N/A'}</div>
+                                    <div className="mb-2"><span className="font-bold">Status:</span> {get('status', 'Active')}</div>
+                                    <div className="mb-2"><span className="font-bold">Category:</span> {get('category', 'General')}</div>
                                 </div>
-                                <div className="bg-gray-900/50 p-4 rounded-lg">
-                                    <h4 className="font-bold text-primary mb-2">Technologies Used</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {(project?.technologies && Array.isArray(project.technologies) ? project.technologies : ['Not specified']).map((tech, idx) =>
-                                            <span key={idx} className="text-xs bg-gray-700 px-2 py-1 rounded">{tech}</span>
-                                        )}
-                                    </div>
-                                </div>
-                                {(project?.links?.github || project?.links?.live) && (
-                                    <div className="bg-gray-900/50 p-4 rounded-lg">
-                                        <h4 className="font-bold text-primary mb-2">Links</h4>
-                                        <div className="flex flex-col space-y-2">
-                                            {project?.links?.github && <a href={project.links.github} target="_blank" rel="noopener noreferrer" className="btn-secondary text-sm py-2 text-center">View on GitHub</a>}
-                                            {project?.links?.live && <a href={project.links.live} target="_blank" rel="noopener noreferrer" className="btn-primary text-sm py-2 text-center">View Live Demo</a>}
+                                {data.technologies && data.technologies.length > 0 && (
+                                    <div className="bg-[var(--bg-secondary)] p-4 rounded-lg border border-[var(--border-color)]">
+                                        <h5 className="font-bold mb-2 text-sm">Tech Stack</h5>
+                                        <div className="flex flex-wrap gap-2">
+                                            {data.technologies.map((t, i) => (
+                                                <span key={i} className="text-xs bg-[var(--bg-primary)] border border-[var(--border-color)] px-2 py-1 rounded">{t}</span>
+                                            ))}
                                         </div>
                                     </div>
+                                )}
+                                {/* Check for DB column github_url, else fallback to links object */}
+                                {(data.github_url || data.links?.github) && (
+                                    <a href={data.github_url || data.links?.github} target="_blank" rel="noopener noreferrer" className="btn-secondary block text-center py-2 text-sm">
+                                        View on GitHub <Icon name="github" className="inline ml-1" />
+                                    </a>
                                 )}
                             </div>
                         </div>
@@ -1019,121 +970,100 @@ export const DetailsModal = ({ isOpen, onClose, type, data, onImageClick }) => {
                 );
             case 'upcoming_event':
             case 'past_event':
-                const event = data;
                 return (
-                    <div className="flex flex-col gap-6">
-                        <GalleryScroller
-                            images={event.images}
-                            title={event.title}
-                            onImageClick={onImageClick}
-                        />
-                        <p className="text-gray-300">{event.description}</p>
-                        <div className="space-y-2 text-sm text-gray-200 border-t border-gray-700 pt-4 mt-4">
-                            <p><strong>Date:</strong> {new Date(event.date).toLocaleDateString("en-US", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                            {event.time && <p><strong>Time:</strong> {event.time}</p>}
-                            <p><strong>Location:</strong> {event.location}</p>
-                            {type === 'upcoming_event' && <p><strong>Seats Available:</strong> {event.capacity}</p>}
-                        </div>
-                        {type === 'upcoming_event' && event.redirect_url && (
-                            <button
-                                className="btn-primary w-full py-3 rounded-lg font-semibold mt-6"
-                                onClick={() => window.open(event.redirect_url, '_blank')}
-                            >
-                                Register Now
-                            </button>
-                        )}
-
-                        {type === 'past_event' && event.highlights && (
-                            <div className="mt-4">
-                                <h4 className="font-bold text-primary mb-2">Highlights:</h4>
-                                <ul className="list-disc list-inside text-gray-400 text-sm">
-                                    {event.highlights.map(h => <li key={h}>{h}</li>)}
-                                </ul>
+                    <div>
+                        <GalleryScroller images={data.images} title={data.title} onImageClick={onImageClick} />
+                        <div className="space-y-4">
+                            <p className="text-[var(--text-secondary)]">{data.description}</p>
+                            <div className="grid grid-cols-2 gap-4 bg-[var(--bg-secondary)] p-4 rounded-lg border border-[var(--border-color)] text-sm">
+                                <div><span className="font-bold">Date:</span> {new Date(data.date).toDateString()}</div>
+                                <div><span className="font-bold">Time:</span> {get('time', 'TBA')}</div>
+                                <div><span className="font-bold">Location:</span> {get('location', 'TBA')}</div>
+                                {type === 'upcoming_event' && (
+                                    <div><span className="font-bold">Capacity:</span> {get('capacity', 'Unlimited')}</div>
+                                )}
                             </div>
-                        )}
+                            {type === 'upcoming_event' && data.redirect_url && (
+                                <a href={data.redirect_url} target="_blank" className="btn-primary block text-center w-full py-3 mt-4">Register Now</a>
+                            )}
+                        </div>
                     </div>
                 );
             case 'team':
-                const member = data;
-                return (
-                    <div className="flex flex-col gap-6 text-left">
-                        {/* Header */}
-                        <div className="text-center">
-                            <img src={member.image} alt={member.name} className="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-primary" />
-                            <h4 className="text-2xl font-bold">{member.name}</h4>
-                            <p className="text-accent">{member.role}</p>
-                            <p className="text-gray-400 text-sm">{member.department}</p>
-                        </div>
-
-                        {/* Two-Column Layout */}
-                        <div className="flex flex-col md:flex-row gap-6 border-t border-gray-700 pt-6">
-                            {/* Left Column: Bio & Info */}
-                            <div className="flex-1 space-y-4">
-                                <div>
-                                    <h5 className="font-bold text-primary mb-2">About</h5>
-                                    <p className="text-gray-300 text-sm">{member.bio}</p>
-                                </div>
-                                {(member.publications || member.projects) && (
-                                    <div>
-                                        <h5 className="font-bold text-primary mb-2">Contributions</h5>
-                                        <div className="text-sm text-gray-400">
-                                            {member.publications && <p>Publications: {member.publications}</p>}
-                                            {member.projects && <p>Projects: {member.projects}</p>}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            {/* Right Column: Skills & Link */}
-                            <div className="md:w-1/3 space-y-4">
-                                <div>
-                                    <h5 className="font-bold text-primary mb-2">Expertise</h5>
-                                    <div className="flex flex-wrap gap-2">
-                                        {member.expertise.map(skill => <span key={skill} className="text-xs bg-gray-700 text-accent font-medium px-2 py-1 rounded">{skill}</span>)}
-                                    </div>
-                                </div>
-                                {member.link && <a href={member.link} target="_blank" rel="noopener noreferrer" className="btn-primary block text-center w-full py-2 rounded-lg mt-4">View Profile</a>}
-                            </div>
-                        </div>
-                    </div>
-                );
-
             case 'alumni':
-                const person = data;
+                // Common fields normalization
+                const isAlumni = type === 'alumni';
+                const role = isAlumni ? (data.currentRole || data.current_role) : data.role;
+                const subtext = isAlumni ? `Class of ${data.year}` : data.department;
+                const link = data.linkedin_url || data.link;
+
                 return (
-                    <div className="flex flex-col gap-6 text-left">
-                        {/* Header */}
-                        <div className="text-center">
-                            <img src={person.image} alt={person.name} className="w-32 h-32 rounded-full mx-auto mb-4 border-4 border-primary" />
-                            <h4 className="text-2xl font-bold">{person.name}</h4>
-                            <p className="text-accent">{person.currentRole}</p>
-                            {person.year && <p className="text-gray-400 text-sm">Active Year: {person.year}</p>}
+                    <div className="profile-grid">
+                        {/* Left Column: Big Image */}
+                        <div className="shrink-0">
+                            <img
+                                src={data.image || 'https://placehold.co/400x400?text=User'}
+                                alt={data.name}
+                                className="profile-avatar-large"
+                            />
                         </div>
 
-                        {/* Content Area */}
-                        <div className="border-t border-gray-700 pt-6">
-                            {person.quote && (
-                                <blockquote className="text-center text-gray-300 italic border-l-4 border-primary pl-4 mb-6">
-                                    "{person.quote}"
-                                </blockquote>
+                        {/* Right Column: Details */}
+                        <div className="profile-content">
+                            <h4 className="text-3xl font-bold text-[var(--text-primary)] mb-1">
+                                {data.name}
+                            </h4>
+                            <p className="text-xl text-[var(--primary-color)] font-bold mb-1">
+                                {role}
+                            </p>
+                            <div className="inline-block bg-[var(--bg-secondary)] border border-[var(--border-color)] px-3 py-1 rounded-full text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase mb-6 self-center md:self-start">
+                                {subtext}
+                            </div>
+
+                            {/* Bio / Quote Section */}
+                            <div className="text-[var(--text-secondary)] leading-relaxed space-y-4 mb-6">
+                                {isAlumni && data.quote && (
+                                    <blockquote className="italic border-l-4 border-[var(--primary-color)] pl-4 py-1 my-4 bg-[var(--bg-secondary)]/30 rounded-r">
+                                        "{data.quote}"
+                                    </blockquote>
+                                )}
+                                {data.bio && <p>{data.bio}</p>}
+                            </div>
+
+                            {/* Uniform Button */}
+                            {link && (
+                                <div className="mt-auto pt-2">
+                                    <a
+                                        href={link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="btn-primary inline-flex items-center px-6 py-3 gap-2 text-sm uppercase tracking-wide shadow-lg"
+                                    >
+                                        <Icon name="linkedin" className="w-5 h-5" />
+                                        Connect on LinkedIn
+                                    </a>
+                                </div>
                             )}
-                            <p className="text-center text-gray-400 mb-6">Our esteemed alumnus, now making an impact in the professional world.</p>
-                            <a href={person.link} target="_blank" rel="noopener noreferrer" className="btn-primary block text-center w-full max-w-xs mx-auto py-2 rounded-lg">View LinkedIn Profile</a>
                         </div>
                     </div>
                 );
             default:
-                return <p className="text-gray-300 mb-4">{data.description || 'Details not available.'}</p>;
+                return <p>No details available.</p>;
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between p-6 border-b border-gray-700">
-                    <h3 className="text-2xl font-bold text-primary">{data.title || data.name || 'Details'}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 animate-fadeIn" onClick={onClose}>
+            <div className="bg-[var(--bg-primary)] rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-[var(--border-color)] flex justify-between items-center sticky top-0 bg-[var(--bg-primary)] z-10">
+                    <h3 className="text-xl font-bold text-[var(--text-primary)]">
+                        {type === 'team' || type === 'alumni' ? 'Profile Details' : (data.title || 'Details')}
+                    </h3>
+                    <button onClick={onClose} className="text-2xl text-[var(--text-muted)] hover:text-[var(--primary-color)] w-8 h-8 flex items-center justify-center rounded-full transition-colors">&times;</button>
                 </div>
-                <div className="p-6 overflow-y-auto">{renderContent()}</div>
+                <div className="p-6">
+                    {renderContent()}
+                </div>
             </div>
         </div>
     );
