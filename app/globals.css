@@ -4,20 +4,18 @@
 @tailwind utilities;
 
 :root {
-  /* --- Light Mode --- */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-card: rgba(255, 255, 255, 0.95);
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --primary-color: #059669;
-  --primary-hover: #047857;
-  --accent-color: #7c3aed;
-  --border-color: #e2e8f0;
-  --shadow-color: rgba(0, 0, 0, 0.06);
+  --bg-primary: #FDFCF8;
+  --bg-secondary: #F0F4EF;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --text-primary: #1A2F23;
+  --text-secondary: #4A6356;
+  --text-muted: #8FA69A;
+  --primary-color: #15803D;
+  --primary-hover: #14532D;
+  --accent-color: #D97706;
+  --border-color: #DDE5E0;
+  --shadow-color: rgba(21, 128, 61, 0.12);
 
-  /* SDG Specific Colors */
   --sdg-1: #E5243B;
   --sdg-2: #DDA63A;
   --sdg-3: #4C9F38;
@@ -38,17 +36,17 @@
 }
 
 .dark {
-  /* --- Dark Mode --- */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-card: rgba(30, 41, 59, 0.7);
+  /* --- Dark Mode (Retained & Tweaked for Consistency) --- */
+  --bg-primary: #020617;
+  --bg-secondary: #0F172A;
+  --bg-card: rgba(15, 23, 42, 0.6);
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
-  --primary-color: #34d399;
-  --primary-hover: #10b981;
-  --accent-color: #c084fc;
-  --border-color: #334155;
+  --primary-color: #4ade80;
+  --primary-hover: #22c55e;
+  --accent-color: #fbbf24;
+  --border-color: #1e293b;
   --shadow-color: rgba(0, 0, 0, 0.5);
 }
 
@@ -57,6 +55,8 @@ body {
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--bg-primary);
+  /* Added a subtle grain/gradient to background to fix "flatness" */
+  background-image: radial-gradient(circle at 50% 0%, rgba(21, 128, 61, 0.03) 0%, transparent 70%);
   overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
 }

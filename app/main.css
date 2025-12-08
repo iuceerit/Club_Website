@@ -1,9 +1,36 @@
-/* Unified Main Styles */
+/* =========================================
+   1. CORE VARIABLES & BASE
+   ========================================= */
+:root {
+  /* Inherits from global config, local overrides here */
+}
 
-/* --- Navigation --- */
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+main {
+  flex: 1;
+  width: 100%;
+}
+
+#loading-screen {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* =========================================
+   2. NAVIGATION
+   ========================================= */
 #navbar {
   transition: all 0.3s ease;
   background: transparent;
+  z-index: 1000;
 }
 
 #navbar.scrolled {
@@ -24,7 +51,9 @@
   color: var(--primary-color);
 }
 
-/* --- Buttons --- */
+/* =========================================
+   3. BUTTONS & UI ELEMENTS
+   ========================================= */
 .btn-primary {
   background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
   color: white;
@@ -55,52 +84,56 @@
   transform: translateY(-2px);
 }
 
-/* --- Section Cards (Generic) --- */
-.section-card {
+.badge-3d {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: var(--bg-secondary);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* =========================================
+   4. CARDS & MODULES
+   ========================================= */
+
+/* --- 4.1 Generic Cards (Projects, Events) --- */
+.section-card,
+.project-card,
+.event-card,
+.sdg-card {
+  display: flex;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 1rem;
-  padding: 1.5rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 6px var(--shadow-color);
   height: 100%;
+  overflow: hidden;
 }
 
-.section-card:hover {
+.section-card:hover,
+.project-card:hover,
+.event-card:hover,
+.sdg-card:hover {
   transform: translateY(-5px);
   border-color: var(--primary-color);
   box-shadow: 0 15px 30px var(--shadow-color);
 }
 
-/* --- Project & Event Cards --- */
+.section-card {
+  padding: 1.5rem;
+  display: block;
+}
+
 .project-card,
 .event-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 1rem;
   padding: 1.5rem;
-  transition: all 0.3s ease;
-  height: 100%;
-  display: flex;
   flex-direction: column;
-}
-
-.project-card:hover,
-.event-card:hover {
-  transform: translateY(-5px);
-  border-color: var(--primary-color);
-  box-shadow: 0 15px 30px var(--shadow-color);
-}
-
-.project-card h3,
-.event-card h3 {
-  margin-bottom: 0.5rem;
-}
-
-.project-card p,
-.event-card p {
-  flex-grow: 1;
-  margin-bottom: 1rem;
 }
 
 .project-card img,
@@ -112,168 +145,163 @@
   margin-bottom: 1rem;
 }
 
-/* --- Team & Alumni Cards --- */
-.team-card,
-.alumni-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
+/* --- 4.2 COMPACT PROFILE CARD DESIGN --- */
+.profile-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3/4;
   border-radius: 1rem;
-  padding: 1.5rem 1rem;
-  text-align: center;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border: 1px solid var(--border-color);
+  isolation: isolate;
+  background: var(--bg-card);
+  outline: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.profile-card:hover,
+.profile-card:focus-within {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px var(--shadow-color);
+  border-color: var(--primary-color);
+}
+
+.profile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease, filter 0.3s ease;
+}
+
+.profile-card.has-quote:hover .profile-img,
+.profile-card.has-quote:focus-within .profile-img {
+  transform: scale(1.1);
+  filter: blur(3px) brightness(0.4);
+}
+
+.profile-card:not(.has-quote):hover .profile-img,
+.profile-card:not(.has-quote):focus-within .profile-img {
+  transform: scale(1.1);
+}
+
+.profile-quote-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 100%;
-  min-height: 260px;
   justify-content: center;
-  /* Ensure full width in marquee */
-  width: 100%;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 15;
+  pointer-events: none;
 }
 
-.team-card:hover,
-.alumni-card:hover {
-  transform: translateY(-5px);
-  border-color: var(--primary-color);
-  box-shadow: 0 15px 30px var(--shadow-color);
+.profile-card.has-quote:hover .profile-quote-overlay,
+.profile-card.has-quote:focus-within .profile-quote-overlay {
+  opacity: 1;
 }
 
-.team-card img,
-.alumni-card img {
-  width: 80px !important;
-  height: 80px !important;
-  margin-bottom: 0.75rem;
-}
-
-.team-card h3,
-.alumni-card h3 {
-  font-size: 1.1rem;
-  margin-bottom: 0.25rem;
-}
-
-.team-card p,
-.alumni-card p {
-  margin-bottom: 0.25rem;
-  line-height: 1.2;
-}
-
-/* Utilities */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.line-clamp-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* --- Timeline --- */
-.timeline-line {
-  background: linear-gradient(to bottom, var(--primary-color), var(--accent-color));
-  opacity: 0.5;
-}
-
-.timeline-content {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 4px 6px var(--shadow-color);
-}
-
-.timeline-dot {
-  background: var(--primary-color);
-  box-shadow: 0 0 0 4px var(--bg-primary);
-}
-
-/* --- Gallery & Scrollers (Horizontal Scroll Snap) --- */
-.scroll-section-container {
-  position: relative;
-  width: 100%;
-  /* Center the scroll wrapper itself */
-  display: flex;
-  justify-content: center;
-}
-
-.scroll-wrapper {
-  display: flex;
-  gap: 1.5rem;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  padding: 1rem 0;
-  scrollbar-width: none;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  /* Key change: This centers items if they don't fill the screen, 
-     but keeps them scrollable to the left if they do overflow */
-  margin: 0 auto;
-  max-width: 100%;
-}
-
-/* Firefox/Edge hide scrollbar */
-.scroll-wrapper::-webkit-scrollbar {
-  display: none;
-}
-
-/* Desktop Default Card Sizing */
-.scroll-wrapper>div {
-  flex: 0 0 320px;
-  width: 320px;
-  scroll-snap-align: center;
-  height: auto;
-}
-
-/* --- Navigation Buttons for Scroller --- */
-.scroll-nav-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--primary-color);
+.quote-icon {
   font-size: 1.5rem;
+  color: var(--primary-color);
+  margin-bottom: 0.5rem;
+  opacity: 0.9;
+}
+
+.quote-text {
+  color: #fff;
+  font-size: 0.85rem;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.profile-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  background: linear-gradient(to bottom,
+      transparent 0%,
+      rgba(0, 0, 0, 0.7) 30%,
+      rgba(0, 0, 0, 0.95) 100%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.profile-name {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+  line-height: 1.2;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.profile-role {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  margin-bottom: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 50;
-  box-shadow: 0 4px 12px var(--shadow-color);
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: auto;
+}
+
+.profile-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.profile-btn {
+  background-color: #ffffff;
+  color: #000000;
+  border-radius: 2rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-decoration: none;
   transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
 }
 
-.scroll-nav-btn:hover {
-  background: var(--primary-color);
-  color: #fff;
-  transform: translateY(-50%) scale(1.1);
+.profile-btn:hover {
+  background-color: var(--primary-color);
+  color: #ffffff;
 }
 
-.scroll-nav-btn.left-0 {
-  left: 0.5rem;
-}
-
-.scroll-nav-btn.right-0 {
-  right: 0.5rem;
-}
-
-/* --- SDG Cards --- */
+/* --- 4.3 SDG Cards --- */
 .sdg-card {
   flex: 0 0 300px !important;
   width: 300px !important;
-  min-height: 250px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
   position: relative;
-  overflow: hidden;
-  transition: transform 0.3s ease;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -290,74 +318,140 @@
   height: 6px;
 }
 
-.sdg-card:hover {
-  transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 10px 20px var(--shadow-color);
+/* =========================================
+   5. TIMELINE & SCROLLERS
+   ========================================= */
+.timeline-line {
+  background: linear-gradient(to bottom, var(--primary-color), var(--accent-color));
+  opacity: 0.5;
 }
 
-/* --- Gallery Slider (Center Alignment Fix) --- */
+.timeline-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px var(--shadow-color);
+}
+
+.timeline-dot {
+  background: var(--primary-color);
+  box-shadow: 0 0 0 4px var(--bg-primary);
+}
+
+/* --- Draggable Scroller Wrapper --- */
+.scroll-section-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  user-select: none;
+}
+
+.scroll-wrapper {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 1rem 1rem 2rem 1rem;
+  cursor: grab;
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary-color) transparent;
+}
+
+.scroll-wrapper.is-dragging {
+  cursor: grabbing;
+  scroll-behavior: auto;
+  scroll-snap-type: none;
+}
+
+.scroll-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scroll-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0 20px;
+}
+
+.scroll-wrapper::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 10px;
+  transition: background-color 0.3s ease;
+}
+
+.scroll-wrapper:hover::-webkit-scrollbar-thumb {
+  background-color: var(--primary-color);
+}
+
+.scroll-wrapper>div {
+  flex: 0 0 320px;
+  width: 320px;
+  scroll-snap-align: start;
+}
+
+/* =========================================
+   6. GALLERY (MOBILE FIXES)
+   ========================================= */
 .gallery-slider {
   display: flex;
-  gap: 2rem;
+  gap: 0;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  padding: 2rem 0;
-  /* Remove horizontal padding here, handle via container */
-  scrollbar-width: none;
+  padding: 4rem 20vw;
   width: 100%;
   align-items: center;
-}
-
-/* Ensure the first and last items can be centered */
-.gallery-slider::before,
-.gallery-slider::after {
-  content: '';
-  flex: 0 0 20vw;
-  /* Push items to center */
+  scroll-snap-type: x mandatory;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .gallery-slider::-webkit-scrollbar {
   display: none;
 }
 
+.gallery-slider.is-dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+  /* Disable snap while dragging */
+}
+
 .gallery-slide {
-  flex: 0 0 85vw;
-  /* Default mobile width */
-  height: 300px;
-  scroll-snap-align: center;
+  flex: 0 0 60vw;
+  height: 35rem;
   position: relative;
   border-radius: 1rem;
   overflow: hidden;
-  transform: scale(0.95);
-  transition: transform 0.5s ease, box-shadow 0.3s ease;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  margin: 0 1.5rem;
+
+  /* MOBILE FIX: Snap alignment */
+  scroll-snap-align: center;
+
+  transform: scale(0.9);
+  opacity: 0.4;
+  filter: blur(2px) grayscale(50%);
+  transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: none;
 }
 
-.gallery-slide.is-active {
-  transform: scale(1);
-  box-shadow: 0 20px 40px var(--shadow-color);
+.gallery-slide:hover {
+  cursor: pointer;
+}
+
+.gallery-slide.focused {
+  transform: scale(1.1);
+  opacity: 1;
+  filter: blur(0) grayscale(0%);
+  z-index: 10;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
 .gallery-slide img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.5s ease;
-}
-
-.gallery-slide:hover {
-  transform: scale(1);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  z-index: 10;
-}
-
-.gallery-slide:hover img {
-  transform: scale(1.05);
+  pointer-events: none;
 }
 
 .gallery-slide-overlay {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95), transparent);
   position: absolute;
   inset: 0;
   display: flex;
@@ -365,65 +459,86 @@
   justify-content: flex-end;
   padding: 2rem;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.5s ease;
 }
 
-.gallery-slide:hover .gallery-slide-overlay {
+.gallery-slide.focused .gallery-slide-overlay {
   opacity: 1;
 }
 
+.gallery-count-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.gallery-slide.focused .gallery-count-badge {
+  opacity: 1;
+}
+
+/* --- GALLERY NAV BUTTONS --- */
 .gallery-nav-btn {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
   width: 3.5rem;
   height: 3.5rem;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 1.5rem;
   cursor: pointer;
-  z-index: 20;
+  z-index: 50;
   transition: all 0.3s ease;
-  backdrop-filter: blur(4px);
+
+  /* Positioning relative to the center card (adjust as needed) */
+  left: 10vw;
+}
+
+.gallery-nav-btn.next {
+  left: auto;
+  right: calc(50% - 34vw);
+}
+
+/* Hover state primarily for desktop */
+#gallery:hover .gallery-nav-btn {
+  opacity: 1;
 }
 
 .gallery-nav-btn:hover {
   background: var(--primary-color);
   transform: translateY(-50%) scale(1.1);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 20px var(--primary-color);
 }
 
-.gallery-nav-btn.prev {
-  left: 20px;
-}
-
-.gallery-nav-btn.next {
-  right: 20px;
-}
-
-/* --- Marquee / Scroller Refinements --- */
-/* We are removing the keyframe animations in favor of JS control for smoother manual interaction */
+/* =========================================
+   7. MARQUEE & PARTNERS
+   ========================================= */
 .marquee-container {
   width: 100%;
   overflow-x: auto;
-  /* Allow manual scroll */
   overflow-y: hidden;
-  position: relative;
-  /* Gradient Masks for fading edges */
-  -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
-  mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  padding: 1rem 0;
   scrollbar-width: none;
-  /* Hide scrollbar Firefox */
   cursor: grab;
 }
 
 .marquee-container::-webkit-scrollbar {
   display: none;
-  /* Hide scrollbar Chrome/Safari */
 }
 
 .marquee-container:active {
@@ -434,28 +549,7 @@
   display: flex;
   gap: 1.5rem;
   width: max-content;
-  /* Ensure it expands to fit content */
-  padding: 1rem 0;
-  /* Centering: if content is small, center it. If large, it scrolls. */
   margin: 0 auto;
-}
-
-/* Marquee Card Sizing (Desktop) */
-.marquee-card {
-  flex: 0 0 280px;
-  width: 280px;
-  /* Fix vertical alignment */
-  display: flex;
-  flex-direction: column;
-}
-
-/* --- Partners Section --- */
-.partner-track {
-  display: flex;
-  gap: 4rem;
-  width: max-content;
-  /* We will reuse the JS marquee for this if needed, or keep simple css */
-  padding: 1rem;
 }
 
 .partner-logo {
@@ -463,14 +557,13 @@
   width: auto;
   max-width: 200px;
   object-fit: contain;
-  transition: all 0.3s ease;
   filter: grayscale(100%) invert(1);
   opacity: 0.7;
+  transition: all 0.3s ease;
 }
 
 .dark .partner-logo {
   filter: grayscale(100%) invert(0);
-  opacity: 0.7;
 }
 
 .partner-logo:hover {
@@ -479,141 +572,46 @@
   transform: scale(1.1);
 }
 
-/* --- Desktop Specifics --- */
-@media (min-width: 768px) {
-  .gallery-slide {
-    flex: 0 0 60vw;
-    height: 500px;
-  }
-
-  /* Reset gallery spacers for desktop to center larger cards nicely */
-  .gallery-slider::before,
-  .gallery-slider::after {
-    flex: 0 0 20vw;
-  }
+/* =========================================
+   8. FOOTER & UTILS
+   ========================================= */
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
 }
 
-/* --- MOBILE OPTIMIZATIONS --- */
-@media (max-width: 768px) {
-
-  /* Center headers and text generally on mobile */
-  .container {
-    text-align: center;
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  /* Scroller Cards: 
-     Use a slightly smaller width than 85vw to see the next card peeking 
-     (affordance for scrolling) */
-  .scroll-wrapper>div {
-    flex: 0 0 80vw;
-    width: 80vw;
-  }
-
-  /* Adjust Gallery slide width */
-  .gallery-slide {
-    flex: 0 0 85vw;
-    height: 350px;
-  }
-
-  /* Reduce spacer size on mobile */
-  .gallery-slider::before,
-  .gallery-slider::after {
-    flex: 0 0 7.5vw;
-  }
-
-  /* Marquee Card Mobile Fix */
-  .marquee-card {
-    flex: 0 0 70vw !important;
-    /* Smaller to see more context */
-    width: 70vw !important;
-  }
-
-  /* SDG Card Mobile */
-  .sdg-card {
-    flex: 0 0 80vw !important;
-    width: 80vw !important;
-  }
-
-  .marquee-content {
-    gap: 1rem;
-  }
-
-  /* Navbar adjustments */
-  #navbar .container {
-    padding: 1rem;
-  }
-
-  /* Ensure timeline is readable */
-  .timeline-content {
-    text-align: left;
-    /* Keep timeline text left aligned for readability */
-  }
-}
-
-/* --- Badges --- */
-.badge-3d {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  background: var(--bg-secondary);
-  color: var(--primary-color);
-  border: 1px solid var(--primary-color);
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* --- Loading Screen --- */
-#loading-screen {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.App {
+.footer-card {
   display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  position: relative;
-  overflow-x: hidden;
-}
-
-main {
-  flex: 1;
-  width: 100%;
-}
-
-/* Footer specific refinements */
-.footer-link {
-  position: relative;
-  display: inline-block;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
   text-decoration: none;
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
 }
 
-.footer-link::after {
-  content: '';
-  position: absolute;
-  width: 0;
-  height: 1px;
-  bottom: -2px;
-  left: 0;
-  background-color: var(--primary-color);
-  transition: width 0.3s ease;
+.footer-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary-color);
+  background: var(--bg-card);
 }
 
-.footer-link:hover {
-  color: var(--primary-color);
+.footer-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--bg-primary);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  border: 1px solid var(--border-color);
 }
 
-.footer-link:hover::after {
-  width: 100%;
-}
-
-/* Floating Button */
 .scroll-to-top {
   position: fixed;
   bottom: 2rem;
@@ -629,10 +627,9 @@ main {
   font-size: 1.5rem;
   box-shadow: 0 4px 12px var(--shadow-color);
   z-index: 100;
-  cursor: pointer;
-  transition: all 0.3s ease;
   opacity: 0;
   transform: translateY(20px);
+  transition: all 0.3s ease;
   pointer-events: none;
 }
 
@@ -642,124 +639,79 @@ main {
   pointer-events: auto;
 }
 
-.scroll-to-top:hover {
-  transform: translateY(-5px);
-  background: var(--primary-hover);
-}
+/* =========================================
+   9. MEDIA QUERIES (Unified)
+   ========================================= */
 
-/* --- Profile Details Modal Fixes --- */
-
-.profile-social-section {
-  margin-top: 1.5rem;
-  display: flex;
-  align-items: center;
-}
-
-.profile-social-section a {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: #0a66c2;
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 1rem;
-  transition: all 0.2s ease;
-  padding: 0.5rem 0;
-}
-
-.profile-social-section a:hover {
-  opacity: 0.8;
-  transform: translateX(4px);
-}
-
-.profile-social-section img,
-.profile-social-section svg {
-  width: 28px !important;
-  height: 28px !important;
-  object-fit: contain;
-  border-radius: 4px;
-  margin: 0;
-}
-
-/* --- New Profile Modal Layout --- */
-.profile-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  text-align: center;
-}
-
-/* Big, nice Profile Picture */
-.profile-avatar-large {
-  width: 160px;
-  height: 160px;
-  border-radius: 1rem;
-  /* Modern soft square */
-  object-fit: cover;
-  border: 4px solid var(--bg-secondary);
-  box-shadow: 0 8px 20px var(--shadow-color);
-  margin: 0 auto;
-  transition: transform 0.3s ease;
-}
-
-.profile-avatar-large:hover {
-  transform: scale(1.02);
-  border-color: var(--primary-color);
-}
-
-.profile-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-/* Desktop: Side-by-side layout */
 @media (min-width: 768px) {
-  .profile-grid {
-    flex-direction: row;
-    text-align: left;
-    gap: 2.5rem;
-    align-items: flex-start;
+  .gallery-slide {
+    flex: 0 0 60vw;
+    margin: 0 1rem;
+    height: 37rem;
   }
 
-  .profile-avatar-large {
-    width: 200px;
-    /* Even bigger on desktop */
-    height: 200px;
-    margin: 0;
-    /* Reset auto margin */
+  .gallery-slider {
+    overflow-x: hidden;
+    scroll-snap-type: none;
+    cursor: default;
   }
 }
 
-/* --- Mobile Gallery Optimizations --- */
 @media (max-width: 768px) {
-
-  /* Hide navigation arrows on mobile since it is scrollable */
-  .gallery-nav-btn,
-  .scroll-nav-btn {
-    display: none !important;
+  .scroll-wrapper>div {
+    flex: 0 0 85vw !important;
+    width: 85vw !important;
   }
 
-  /* Force overlay text to be visible on mobile without hovering */
+  .sdg-card {
+    flex: 0 0 30vw !important;
+    width: 70vw !important;
+  }
+
+  /* Mobile Gallery Specifics */
+  .gallery-slider {
+    /* Less padding on mobile to show more of the card */
+    padding: 4rem 15vw;
+  }
+
+  .gallery-slide {
+    flex: 0 0 70vw;
+    height: 28rem;
+    margin: 0 0.5rem;
+  }
+
+  .gallery-slide.focused {
+    transform: scale(1.05);
+  }
+
   .gallery-slide-overlay {
     opacity: 1 !important;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%);
-    padding-bottom: 2rem;
+    padding: 1rem;
   }
 
-  /* Ensure text doesn't get cut off on small screens */
-  .gallery-slide-overlay h3 {
-    font-size: 1.25rem;
-    margin-bottom: 0.25rem;
+  /* Mobile Nav Buttons: Smaller & Positioned at Edges */
+  .gallery-nav-btn {
+    opacity: 0.8 !important;
+    /* Always visible on mobile, slightly transparent */
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1rem;
+    left: 0.5rem;
+    background: rgba(0, 0, 0, 0.3);
+    /* Darker bg for contrast */
   }
 
-  .gallery-slide-overlay p {
-    font-size: 0.9rem;
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .gallery-nav-btn.next {
+    left: auto;
+    right: 0.5rem;
+  }
+
+  .team-card,
+  .alumni-card {
+    padding: 0 !important;
+  }
+
+  .profile-card {
+    aspect-ratio: 3/4;
   }
 }

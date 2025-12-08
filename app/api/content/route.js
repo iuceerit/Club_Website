@@ -29,13 +29,20 @@ export async function GET(request) {
                 .order('is_primary', { ascending: false });
 
             return NextResponse.json({
-                images: mediaData?.map(m => m.image_url) || []
+                images: mediaData?.map(m => {
+                    const url = m.image_url;
+                    if (url && url.includes('supabase.co') && !url.includes('?')) {
+                        return `${url}?width=1920&quality=90`;
+                    }
+                    return url;
+                }) || []
             });
         }
 
         // --- BRANCH 2: MAIN DATA LOAD ---
 
         // 1. Run Queries
+        // UPDATED: All main queries now use 'sort_order' as the primary sort key
         const [
             projectsRes,
             eventsRes,
@@ -48,10 +55,10 @@ export async function GET(request) {
             mediaRes
         ] = await Promise.all([
             supabase.from('projects').select('*').order('sort_order', { ascending: true }),
-            supabase.from('events').select('*').order('event_date', { ascending: false }),
-            supabase.from('gallery_albums').select('*').order('event_date', { ascending: false }),
-            supabase.from('team_members').select('*').eq('is_active', true).order('sort_order', { ascending: true }),
-            supabase.from('alumni').select('*').order('graduation_year', { ascending: false }),
+            supabase.from('events').select('*').order('sort_order', { ascending: true }), // Was event_date
+            supabase.from('gallery_albums').select('*').order('event_date', { ascending: false }), // Keep gallery by date
+            supabase.from('team_members').select('*').order('sort_order', { ascending: true }),
+            supabase.from('alumni').select('*').order('sort_order', { ascending: true }), // Was graduation_year
             supabase.from('timeline_events').select('*').order('sort_order', { ascending: true }),
             supabase.from('achievements').select('*').order('sort_order', { ascending: true }),
             supabase.from('partners').select('*').order('sort_order', { ascending: true }),
@@ -73,9 +80,14 @@ export async function GET(request) {
         // 3. Helper to attach images
         const attachMedia = (item, entityType) => {
             const itemMedia = allMedia.filter(m => m.entity_type === entityType && m.entity_id === item.id);
-            const thumbnail = itemMedia.find(m => m.is_primary)?.image_url
+
+            const rawUrl = itemMedia.find(m => m.is_primary)?.image_url
                 || itemMedia[0]?.image_url
                 || 'https://placehold.co/600x400/1f2937/FFFFFF?text=No+Image';
+
+            const thumbnail = (rawUrl.includes('supabase.co') && !rawUrl.includes('?'))
+                ? `${rawUrl}?width=600&resize=contain&quality=80`
+                : rawUrl;
 
             return {
                 ...item,
@@ -85,11 +97,10 @@ export async function GET(request) {
             };
         };
 
-        // 4. Map Data (FIXED: Mapping arrays directly)
+        // 4. Map Data
         const finalProjects = projectsData.map(p => ({
             ...attachMedia(p, 'PROJECT'),
             year: p.project_year,
-            // These lines read the new Array Columns from the DB
             technologies: p.technologies || [],
             teamMembers: p.contributors || []
         }));
@@ -111,7 +122,7 @@ export async function GET(request) {
             team: teamData.map(t => ({ ...t, role: t.team_role, image: t.image_url })),
             alumni: alumniData.map(a => ({ ...a, currentRole: a.job_title, year: a.graduation_year, image: a.image_url, link: a.linkedin_url })),
             timelineEvents: timelineData,
-            achievements: achievementsData.map(a => ({ ...a, icon: a.icon || 'award' })), // Default icon fallback
+            achievements: achievementsData.map(a => ({ ...a, icon: a.icon || 'award' })),
             partnersData: partnersData.map(p => ({ ...p, logoUrl: p.logo_url, websiteUrl: p.website_url }))
         });
 

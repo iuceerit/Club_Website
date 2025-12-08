@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "framer-motion": "^12.23.25",
     "json2csv": "^6.0.0-alpha.2",
-    "next": "15.5.3",
+    "next": "^16.0.7",
     "nextjs": "^0.0.3",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-icons": "^5.5.0",
     "three": "^0.163.0"
   },
   "devDependencies": {
@@ -28,7 +30,7 @@
     "autoprefixer": "^10.4.21",
     "baseline-browser-mapping": "^2.8.32",
     "eslint": "^9",
-    "eslint-config-next": "15.5.3",
+    "eslint-config-next": "^16.0.7",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
