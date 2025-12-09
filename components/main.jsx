@@ -145,15 +145,38 @@ const Icon = ({ name, className = "" }) => {
     return <IconComponent className={className} />;
 };
 
-/** Global Loading Overlay */
-export const LoadingScreen = ({ isLoading }) => (
-    <div id="loading-screen" className={`fixed inset-0 flex items-center justify-center z-50 transition-opacity duration-500 ${isLoading ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-[var(--primary-color)] mx-auto mb-4" />
-            <h2 className="text-xl font-bold">Loading IUCEE-RIT Experiance...</h2>
+export const LoadingScreen = ({ isLoading, progress = 0 }) => {
+    if (!isLoading) return null;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gradient-to-br from-gray-900 via-emerald-900 to-gray-900">
+            <div className="text-center animate-fadeIn">
+                {/* Logo or Title */}
+                <h1 className="text-4xl md:text-6xl font-bold text-white mb-8 tracking-tight">
+                    IUCEE-RIT
+                </h1>
+
+                {/* Loading Text */}
+                <p className="text-xl text-emerald-300 mb-6 font-medium">
+                    Loading Experience
+                </p>
+
+                {/* Progress Bar */}
+                <div className="w-64 h-2 bg-gray-800 rounded-full overflow-hidden mx-auto border border-gray-700">
+                    <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+
+                {/* Progress Percentage */}
+                <p className="text-sm text-gray-400 mt-4 font-mono">
+                    {Math.round(progress)}%
+                </p>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 /** Scroll To Top Button */
 export const ScrollToTop = () => {

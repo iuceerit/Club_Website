@@ -17,6 +17,7 @@ import {
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   // 1. App Data State
   const [appData, setAppData] = useState({
@@ -39,15 +40,66 @@ export default function Home() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isEnrollmentOpen, setIsEnrollmentOpen] = useState(false);
 
-  // --- Initial Data Load ---
+  // --- OPTIMIZATION: Preload images ---
+  const preloadImages = (imageUrls) => {
+    return Promise.all(
+      imageUrls.map(url => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(url);
+          img.onerror = () => resolve(url); // Resolve even on error to not block
+          img.src = url;
+        });
+      })
+    );
+  };
+
+  // --- OPTIMIZATION: Extract all image URLs from data ---
+  const extractAllImageUrls = (data) => {
+    const urls = [];
+
+    // Projects, events, gallery, timeline thumbnails
+    ['projectsData', 'galleryData', 'timelineEvents'].forEach(key => {
+      data[key]?.forEach(item => {
+        if (item.images?.[0]) urls.push(item.images[0]);
+      });
+    });
+
+    // Events (upcoming + past)
+    data.eventsData?.upcoming?.forEach(e => e.images?.[0] && urls.push(e.images[0]));
+    data.eventsData?.past?.forEach(e => e.images?.[0] && urls.push(e.images[0]));
+
+    // Team and alumni profile images
+    data.teamData?.forEach(t => t.image && urls.push(t.image));
+    data.alumni?.forEach(a => a.image && urls.push(a.image));
+
+    // Partner logos
+    data.partnersData?.forEach(p => p.logoUrl && urls.push(p.logoUrl));
+
+    return urls;
+  };
+
+  // --- Initial Data Load (OPTIMIZED) ---
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        const contentRes = await fetch('/api/content').catch(() => null);
+        setLoadingProgress(10);
+
+        // Parallel fetch
+        const [contentRes, btnRes] = await Promise.all([
+          fetch('/api/content').catch(() => null),
+          fetch('/api/button-status').catch(() => null)
+        ]);
+
+        setLoadingProgress(30);
+
         if (contentRes && contentRes.ok) {
           const data = await contentRes.json();
-          setAppData(prev => ({
-            ...prev,
+
+          setLoadingProgress(50);
+
+          // Set data immediately
+          setAppData({
             projectsData: data.projectsData || [],
             galleryData: data.gallery || [],
             eventsData: {
@@ -59,18 +111,29 @@ export default function Home() {
             timelineEvents: data.timelineEvents || [],
             achievements: data.achievements || [],
             partnersData: data.partnersData || []
-          }));
+          });
+
+          setLoadingProgress(60);
+
+          // CRITICAL: Preload all thumbnail images
+          const imageUrls = extractAllImageUrls(data);
+          await preloadImages(imageUrls);
+
+          setLoadingProgress(90);
         }
 
-        const btnRes = await fetch('/api/button-status').catch(() => null);
         if (btnRes && btnRes.ok) {
           const btnData = await btnRes.json();
           setIsEnrollmentOpen(btnData.enabled);
         }
+
+        setLoadingProgress(100);
+
       } catch (error) {
         console.error("Data load error:", error);
       } finally {
-        setTimeout(() => setIsLoading(false), 1000);
+        // Small delay for smooth transition, but no artificial 1s wait
+        setTimeout(() => setIsLoading(false), 300);
       }
     };
     loadAllData();
@@ -125,9 +188,10 @@ export default function Home() {
     }
   };
 
-  // --- Three.js Background ---
+  // --- Three.js Background (Start after loading) ---
   useEffect(() => {
-    if (!canvasRef.current || !THREE) return;
+    if (isLoading || !canvasRef.current || !THREE) return;
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, alpha: true });
@@ -177,7 +241,7 @@ export default function Home() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
 
-  }, []);
+  }, [isLoading]);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -199,7 +263,9 @@ export default function Home() {
   return (
     <div className="App transition-colors duration-300">
       <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full -z-10 opacity-30 pointer-events-none" />
-      <LoadingScreen isLoading={isLoading} />
+
+      <LoadingScreen isLoading={isLoading} progress={loadingProgress} />
+
       <Navbar isScrolled={isScrolled} />
       <main>
         <HeroSection onJoinClick={() => setApplicationModalOpen(true)} isEnrollmentOpen={isEnrollmentOpen} />
