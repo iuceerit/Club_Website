@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+"use client";
+import { useState, useEffect, useRef } from 'react';
 import * as FaIcons from "react-icons/fa";
 import * as SiIcons from "react-icons/si";
 import * as LuIcons from "react-icons/lu";
-import { motion } from 'framer-motion';
-
+import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 /* ======================================================================
    REGION 1: UTILITIES & HELPERS
    ====================================================================== */
+
+export function ThemeProvider({ children, ...props }) {
+    return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}
 
 /** Constants for placeholders */
 const PLACEHOLDERS = {
@@ -240,32 +244,31 @@ export const ScrollToTop = () => {
 
 /** Theme Toggler */
 const ThemeToggle = () => {
-    const [isDark, setIsDark] = useState(false);
+    const { theme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
 
+    // Prevent hydration mismatch
     useEffect(() => {
-        setIsDark(document.documentElement.classList.contains('dark'));
+        setMounted(true);
     }, []);
 
-    const toggleTheme = () => {
-        const root = document.documentElement;
-        const newIsDark = !isDark;
-        if (newIsDark) {
-            root.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            root.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-        setIsDark(newIsDark);
-    };
+    if (!mounted) {
+        // Render a placeholder with the same dimensions to prevent layout shift
+        return (
+            <button className="p-2 rounded-full opacity-0 cursor-default text-xl">
+                ☀️
+            </button>
+        );
+    }
 
     return (
         <button
-            onClick={toggleTheme}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-xl"
-            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            aria-label="Toggle Theme"
         >
-            {isDark ? '🌙' : '☀️'}
+            {theme === 'dark' ? '🌙' : '☀️'}
         </button>
     );
 };
@@ -581,8 +584,8 @@ export const SdgSection = ({ sdgs }) => {
                 </div>
                 {/* Mobile: Double Stack Marquee */}
                 <div className="block md:hidden space-y-4">
-                    <MarqueeScroller items={sdgs || []} direction="left" speed={2.5} renderItem={renderSdgCard} />
-                    <MarqueeScroller items={sdgs || []} direction="right" speed={2.5} renderItem={renderSdgCard} />
+                    <MarqueeScroller items={sdgs || []} direction="left" speed={1.5} renderItem={renderSdgCard} />
+                    <MarqueeScroller items={sdgs || []} direction="right" speed={1.5} renderItem={renderSdgCard} />
                 </div>
             </div>
         </section>

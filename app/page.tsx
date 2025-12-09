@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-
+import { useTheme } from "next-themes";
 import {
   LoadingScreen, Navbar, HeroSection, VisionSection, TimelineSection,
   ProjectsSection, EventsSection, AchievementsSection, TeamSection, AlumniSection,
@@ -18,7 +18,7 @@ import {
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
-
+  const { resolvedTheme } = useTheme();
   // 1. App Data State
   const [appData, setAppData] = useState({
     timelineEvents: [],
@@ -148,10 +148,19 @@ export default function Home() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     camera.position.z = 5;
 
-    const palette = [
+    // --- DEFINE BOTH PALETTES ---
+    const lightPalette = [
       new THREE.Color('#059669'), new THREE.Color('#06b6d4'),
       new THREE.Color('#34d399'), new THREE.Color('#22d3ee')
     ];
+    // Dark mode palette (Blues, Purples, Emeralds - matching your dark theme)
+    const darkPalette = [
+      new THREE.Color('#10b981'), new THREE.Color('#3b82f6'),
+      new THREE.Color('#6366f1'), new THREE.Color('#8b5cf6')
+    ];
+
+    // --- CHOOSE PALETTE BASED ON THEME ---
+    const palette = resolvedTheme === 'dark' ? darkPalette : lightPalette;
 
     const particleCount = window.innerWidth <= 768 ? 60 : 150;
     const geometry = new THREE.BufferGeometry();
@@ -162,7 +171,10 @@ export default function Home() {
       positions[i * 3] = (Math.random() - 0.5) * 25;
       positions[i * 3 + 1] = (Math.random() - 0.5) * 25;
       positions[i * 3 + 2] = (Math.random() - 0.5) * 25;
+
+      // Use the dynamic palette
       const color = palette[Math.floor(Math.random() * palette.length)];
+
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
@@ -170,12 +182,17 @@ export default function Home() {
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    const material = new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: 0.8 });
+
+    // Adjust opacity slightly for dark mode visibility
+    const opacity = resolvedTheme === 'dark' ? 0.6 : 0.8;
+    const material = new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: opacity });
+
     const particles = new THREE.Points(geometry, material);
     scene.add(particles);
 
+    let reqId;
     const animate = () => {
-      requestAnimationFrame(animate);
+      reqId = requestAnimationFrame(animate);
       particles.rotation.y += 0.0005;
       particles.rotation.x += 0.0002;
       renderer.render(scene, camera);
@@ -188,9 +205,18 @@ export default function Home() {
       renderer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
 
-  }, [isLoading]);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(reqId);
+      // Clean up Three.js resources
+      geometry.dispose();
+      material.dispose();
+      renderer.dispose();
+    };
+
+    // 3. IMPORTANT: Add resolvedTheme to dependency array
+  }, [isLoading, resolvedTheme]);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);

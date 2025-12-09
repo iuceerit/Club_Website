@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import './main.css';
+import { ThemeProvider } from "../components/main"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,28 +17,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // ADD suppressHydrationWarning HERE
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var localTheme = localStorage.getItem('theme');
-                  var supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (localTheme === 'dark' || (!localTheme && supportDarkMode)) {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
+        {/* DELETE the entire <script> tag that was here previously */}
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        {/* Wrap children with the Provider */}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
