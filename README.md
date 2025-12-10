@@ -1,1 +1,1 @@
-Website hosted on vercel: https://club-website-five.vercel.app/
+Website hosted on vercel: https://iuceerit.vercel.app/

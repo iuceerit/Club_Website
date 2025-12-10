@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import './main.css';
 import { ThemeProvider } from "../components/main"
+import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,10 +20,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* DELETE the entire <script> tag that was here previously */}
       </head>
       <body className={inter.className}>
-        {/* Wrap children with the Provider */}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -31,6 +30,7 @@ export default function RootLayout({
         >
           {children}
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
